@@ -39,16 +39,18 @@
 \maketitle
 
 \begin{abstract}
-A control flow graph(CFG) is a graphical representation of the flow of the computation during the program execution. Since it represents the flow of logic, it can be used for static analysis or compiler optimization, etc. In this project, my team aims to build a static control flow graph generator from scratch using the concept of an abstract syntax tree. The essential part of the program will be written in Python with the assistance of Graphviz.
+In 1970, Frances E. Allen proposed the idea of control flow graph(CFG). It is a graphical representation of the flow of the computation during the program execution. Since it represents the flow of logic, it can be used for static analysis or compiler optimization, etc. In this project, my team aims to build a static control flow graph generator from scratch using the concept of an abstract syntax tree. The essential part of the program will be written in Python with the assistance of Graphviz.
 \end{abstract}
 
 \section{Problem Statement}\label{section-problemStatement}
-The basic block is a series of program instructions that has only one entry point and one exit point. And the control flow graph is a directed graph in which the vertices represent the basic blocks and the edges represent paths between adjacent vertices. Using CFG, the control flow of the program can be shown easily, making it easier for developers to reveal logic error or expose paths that are not covered by the current tests. Thus, a neat and efficient control flow graph generator is required for software development purposes. In this project, a control flow graph generator will be written in Python, with initial support for source code in Python, and may retrieve other languages support later. The generator is static, which means it will generate the graph without executing the input source code, and the generator should be highly efficient.
+The basic block is a series of program instructions that has only one entry point and one exit point. And the control flow graph is a directed graph in which the vertices represent the basic blocks and the edges represent paths between adjacent vertices. Using CFG, the control flow of the program can be shown easily, making it easier for developers to reveal logic error or expose paths that are not covered by the current tests. Also, researches show that CFG can be used for mulware detection and software plagiarism detection. Thus, a neat and efficient control flow graph generator is required for software development purposes. In this project, a control flow graph generator for high-level representation code(code before being sent to interpreter or compiler) will be written in Python, with initial support for source code in Python, and may retrieve other languages support later. The generator is static, which means it will generate the graph without executing the input source code, and the generator should be highly efficient(the basic blocks in CFG are as few as possible and as large as possible).
 
 \section{Approach}\label{section-approach}
-There are mainly two steps for CFG generation. First, find the basic blocks of the source code and then transform them into a graph representation. To find the basic blocks of the code, simply find the beginning and the ending of a block. The beginning of a basic block includes the first instruction of the code, the next line of the conditional instruction and the function call. And the end of the block could be the conditional instruction, the return, throw, or similar exit keywords that contain the last instruction of the code. Since a module called Abstract Syntax Trees(AST) is provided in Python, we can directly transform the parsed result of AST to CFG. However, the technique mentioned above is still useful if we want to generate CFG from other coding languages like C++.
+There are mainly two steps for CFG generation. First, find the basic blocks of the source code and then transform them into a graph representation. To find the basic blocks of the code, simply find the beginning and the ending of a block. The beginning of a basic block includes the first instruction of the code, the next line of the conditional instruction and the function call. And the end of the block could be the conditional instruction, the return, throw, or similar exit keywords that contain the last instruction of the code. However, this method does not always generate maximal basic blocks, but usually sufficient. 
 
-An abstract syntax tree is a tree representation of the abstract syntactic structure of the source code, with each tree node represents a keyword, a variable, or an operator of the code. It contains basic block information. Thus, to generate CFG from Python code, we can start by converting the original code into an AST directly.
+Since a module called Abstract Syntax Trees(AST) is provided in Python, we can directly transform the parsed result of AST to CFG. However, the technique mentioned above is still useful if we want to generate CFG from other coding languages like C++.
+
+An abstract syntax tree is a tree representation of the abstract syntactic structure of the source code, with each tree node represents a keyword, a variable, or an operator of the code. It contains basic block information. Thus, to generate CFG from Python code, we can start by converting the original code into an AST directly. In \href{https://www.fuzzingbook.org/html/ControlFlow.html}{the fuzzing book}, detailed algorithm is proposed to generate CFGs using AST.
 
 The output format of the graph could be a dot file or an image generated by that dot file using a build-in package Graphviz in Python.
 
@@ -64,8 +66,8 @@ A semi-random selected LeetCode solution set (about 200 independent pieces, each
 Week & Action \\ \hline
 3-4 & Read papers \& tutorials about CFG and Python AST and algorithm design. \\ \hline
 5-8 & Implementation of the control flow graph generator. \\ \hline
-9-10 & Testing \\ \hline
-11-12 & Add support to another language if possible. \\ \hline
+9 & Testing \\ \hline
+10-12 & Add support to another language(C or Java). \\ \hline
 13 & Demo \\ \hline
 \end{tabular}
 
