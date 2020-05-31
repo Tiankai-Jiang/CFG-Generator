@@ -58,9 +58,23 @@ class PyParser:
         self.script = out
 
     # TODO: this method will also remove empty lines in a multiline string
+    # However, it does not affect the control flow
     def removeBlankLines(self):
         io_obj = io.StringIO(self.script)
         self.script = "".join([a for a in io_obj.readlines() if a.strip()])
+
+
+    # Remove multiline code (lines that end with \) ensures that 
+    # All indentations outside of brackets will be in the same line
+    # which makes it easier to analyse the control flow
+    def removeMultiLineCode(self):
+        io_obj = io.StringIO(self.script)
+        lines = [a for a in io_obj.readlines() if a.strip()]
+        for i in reversed(range(len(lines)-1)):
+            if(lines[i].rstrip().endswith('\\')):
+                lines[i] = lines[i][:-2] + lines[i+1].lstrip()
+                lines[i+1] = ''
+        self.script = "".join([a for a in lines if a.strip()])
 
 if __name__ == '__main__':
     filename = sys.argv[1]
@@ -75,4 +89,5 @@ if __name__ == '__main__':
     parser.removeCommentsAndDocstrings()
     parser.formatCode()
     parser.removeBlankLines()
+    parser.removeMultiLineCode()
     print(parser.script, end = '')
