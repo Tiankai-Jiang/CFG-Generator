@@ -1,5 +1,23 @@
 import tokenize, io, sys, autopep8, re
 
+nodeID = 1
+
+class Node:
+
+    def __init__(self):
+        self.ID = nodeID
+        nodeID += 1
+        self.content = ''
+        self.TO = []
+
+class G:
+
+    def __init__(self, name):
+        self.name = name
+        start = Node()
+        start.content = 'start'
+        self.nodes = [start]
+
 class PyParser:
 
     def __init__(self, script):
@@ -63,7 +81,7 @@ class PyParser:
         io_obj = io.StringIO(self.script)
         self.script = "".join([a for a in io_obj.readlines() if a.strip()])
 
-
+    
     # Remove multiline code (lines that end with \) ensures that 
     # All indentations outside of brackets will be in the same line
     # which makes it easier to analyse the control flow
@@ -75,6 +93,35 @@ class PyParser:
                 lines[i] = lines[i][:-2] + lines[i+1].lstrip()
                 lines[i+1] = ''
         self.script = "".join([a for a in lines if a.strip()])
+
+    def extractScope(self):
+        pass
+
+    def removeLeadingIndent(self, lines):
+        spaceCount = 0
+        for i in range(len(lines[0])):
+            if(lines[0][i]==' '):
+                spaceCount += 1
+            else:
+                break
+        for i in range(len(lines)):
+            lines[i] = lines[i][spaceCount:]
+        return lines
+
+    def getIndentLevel(self, lines):
+        pass
+
+    def getFuncName(self, s):
+        m = re.search(r'def\s(.*):', s)
+        return m.groups()[0]
+
+    def generateCFG(self, scope):
+        io_obj = io.StringIO(self.script)
+        lines = [a for a in io_obj.readlines()]
+        funcLines = self.removeLeadingIndent([lines[x] for x in scope])
+        g = G(getFuncName(funcLines[0]))
+        
+
 
 if __name__ == '__main__':
     filename = sys.argv[1]
