@@ -1,7 +1,8 @@
+from __future__ import annotations
 import _ast, ast, astor
 import graphviz as gv
-from __future__ import annotations
 from typing import Dict, List, Tuple, Set, Optional, Type
+
 
 class SingletonMeta(type):
     _instance: Optional[BlockId] = None
@@ -11,6 +12,7 @@ class SingletonMeta(type):
             self._instance = super().__call__()
         return self._instance
 
+
 class BlockId(metaclass=SingletonMeta):
 
     counter: int = 0
@@ -18,6 +20,7 @@ class BlockId(metaclass=SingletonMeta):
     def gen(self) -> int:
         self.counter+=1
         return self.counter
+
 
 class BasicBlock:
 
@@ -42,20 +45,61 @@ class BasicBlock:
         if next_bid in self.next:
             self.next.remove(next_bid)
 
+    def stmts_to_code(self) -> str:
+        code = ''
+        for stmt in self.stmts:
+            line = astor.to_source(stmt)
+            code += line.split('\n')[0] + "\n" if type(stmt) in [ast.If, ast.For, ast.While, ast.FunctionDef, ast.AsyncFunctionDef] else line
+        return code
+
+    def calls_to_code(self) -> str:
+        return '\n'.join(self.calls)
+        
+
 class CFG:
 
     def __init__(self, name):
         self.name: str = name
 
-        # I am sure that variable asynchr is not used
-        # list finalblocks is also not used?
+        # I am sure that in original code variable asynchr is not used
+        # And I think list finalblocks is also not used.
 
         self.start: Optional[BasicBlock] = None
         self.func_calls: Dict[str, CFG] = {}
         self.blocks: Dict[int, BasicBlock] = {}
         self.edges: Dict[Tuple[int, int], Type[_ast.AST]] = {}
+        self.graph: Optional[gv.dot.Digraph] = None
+
+    def _traverse(self, block: BasicBlock, visited: Set[int] = set(), calls: bool = True) -> None:
+        if block.bid not in visited:
+            visited.add(block.bid)
+            self.graph.node(str(block.bid), label = block.stmts_to_code())
+            if calls and block.calls:
+                self.graph.node(str(block.bid)+'_call', label=block.calls_to_code(), _attributes={'shape': 'box'})
+                self.graph.edge(str(block.bid), str(block.bid)+'_call', label="calls", _attributes={'style': 'dashed'})
+
+        for next_bid in block.next:
+            self._traverse(self.blocks[next_bid], visited, calls=calls)
+
+            # Does graphviz accept None as edge label?
+            self.graph.edge(str(block.bid), str(next_bid), label=self.edges[(block.bid, next_bid)] if self.edges[(block.bid, next_bid)] else '')
+
+    def _show(self, fmt: str = 'pdf', calls: bool = True) -> gv.dot.Digraph:
+        self.graph = gv.Digraph(name=self.name, fmt=fmt, graph_attr={'label': self.name})
+        self._traverse(self.start, calls=calls)
+        for k, v in self.func_calls.items():
+            self.graph.subgraph(v._show(fmt, calls))
+        return self.graph
+
+    def show(self, filepath: str = '.', fmt: str = 'pdf', calls: bool =True, show: bool =True) -> None:
+        self._show(fmt, calls)
+        self.graph.render(filepath, view=show)
+
 
 class CFGVisitor(ast.NodeVisitor):
+
+    invertComparators: Dict[Type[_ast.AST], Type[_ast.AST]] = {ast.Eq: ast.NotEq, ast.NotEq: ast.Eq, ast.Lt: ast.GtE, ast.LtE: ast.Gt, 
+    ast.Gt: ast.LtE, ast.GtE: ast.Lt, ast.Is: ast.IsNot, ast.IsNot: ast.Is, ast.In: ast.NotIn, ast.NotIn: ast.In}
 
     def __init__(self):
         super().__init__()
@@ -67,6 +111,7 @@ class CFGVisitor(ast.NodeVisitor):
         self.cfg.start = self.curr_block
 
         self.visit(tree)
+        # Remenber to uncomment
         # self.remove_empty_blocks()
         return self.cfg
 
@@ -94,7 +139,7 @@ class CFGVisitor(ast.NodeVisitor):
     def add_subgraph(self, tree: Type[_ast.AST]) -> None:
         self.cfg.func_calls[tree.name] = CFGVisitor().build(tree.name, ast.Module(body=tree.body))
 
-    def add_condition(self, cond1: Optional[Type[_ast.AST]], cond2: Optional[Type[_ast.AST]]) -> None:
+    def add_condition(self, cond1: Optional[Type[_ast.AST]], cond2: Optional[Type[_ast.AST]]) -> Optional[Type[_ast.AST]]:
         if cond1 and cond2:
             return ast.BoolOp(ast.And(), values=[cond1, cond2])
         else:
@@ -123,4 +168,15 @@ class CFGVisitor(ast.NodeVisitor):
                 for next_bid in block.next:
                     self.remove_empty_blocks(self.cfg.blocks[next_bid], visited)
 
-
+    def invert(self, node: Type[_ast.AST]) -> Type[_ast.AST]:
+        # bug
+        if type(node) == ast.Compare:
+            return ast.Compare(left=node.left, ops=[self.invertComparators[type(node.ops[0])]()], comparators=node.comparators)
+        # ?
+        elif isinstance(node, ast.BinOp) and type(node.op) in inverse:
+            return ast.BinOp(node.left, self.invertComparators[type(node.op)](), node.right)
+            
+        elif type(node) == ast.NameConstant and type(node.value) == bool:
+            return ast.NameConstant(value=not node.value)
+        else:
+            return ast.UnaryOp(op=ast.Not(), operand=node)
