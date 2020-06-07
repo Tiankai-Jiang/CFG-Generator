@@ -80,9 +80,8 @@ class CFG:
 
         for next_bid in block.next:
             self._traverse(self.blocks[next_bid], visited, calls=calls)
-
-            # Does graphviz accept None as edge label?
-            self.graph.edge(str(block.bid), str(next_bid), label=self.edges[(block.bid, next_bid)] if self.edges[(block.bid, next_bid)] else '')
+            self.graph.edge(str(block.bid), str(next_bid), label=self.edges[(block.bid, next_bid)])
+            # self.graph.edge(str(block.bid), str(next_bid), label=self.edges[(block.bid, next_bid)] if self.edges[(block.bid, next_bid)] else '')
 
     def _show(self, fmt: str = 'pdf', calls: bool = True) -> gv.dot.Digraph:
         self.graph = gv.Digraph(name=self.name, fmt=fmt, graph_attr={'label': self.name})
