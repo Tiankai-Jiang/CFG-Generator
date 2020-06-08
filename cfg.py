@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import _ast, ast, astor
 import graphviz as gv
 from typing import Dict, List, Tuple, Set, Optional, Type
@@ -358,6 +359,12 @@ class CFGVisitor(ast.NodeVisitor):
         self.add_edge(self.curr_block.bid, afteryield_block.bid)
         self.curr_block = afteryield_block
 
-with open("/Users/tiankai/Downloads/test.py", 'r') as f:
+
+# FIXME: section moved to test.py file
+'''
+current_path = os.path.dirname(__file__) + "/exampleCode.py"
+print(current_path)
+with open(current_path, 'r') as f:
     cfg = CFGVisitor().build("test", ast.parse(f.read()))
     cfg.show()
+'''
