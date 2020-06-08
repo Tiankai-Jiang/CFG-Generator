@@ -78,9 +78,9 @@ class CFG:
                 self.graph.node(str(block.bid)+'_call', label=block.calls_to_code(), _attributes={'shape': 'box'})
                 self.graph.edge(str(block.bid), str(block.bid)+'_call', label="calls", _attributes={'style': 'dashed'})
 
-        for next_bid in block.next:
-            self._traverse(self.blocks[next_bid], visited, calls=calls)
-            self.graph.edge(str(block.bid), str(next_bid), label=astor.to_source(self.edges[(block.bid, next_bid)]) if self.edges[(block.bid, next_bid)] else '')
+            for next_bid in block.next:
+                self._traverse(self.blocks[next_bid], visited, calls=calls)
+                self.graph.edge(str(block.bid), str(next_bid), label=astor.to_source(self.edges[(block.bid, next_bid)]) if self.edges[(block.bid, next_bid)] else '')
 
     def _show(self, fmt: str = 'pdf', calls: bool = True) -> gv.dot.Digraph:
         self.graph = gv.Digraph(name=self.name, format=fmt, graph_attr={'label': self.name})
