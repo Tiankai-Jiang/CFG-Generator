@@ -1,5 +1,5 @@
 from __future__ import annotations
-import _ast, ast, astor
+import ast, astor
 import graphviz as gv
 from typing import Dict, List, Tuple, Set, Optional, Type
 
@@ -29,7 +29,7 @@ class BasicBlock:
 
     def __init__(self, bid: int):
         self.bid: int = bid
-        self.stmts: List[Type[_ast.AST]] = []
+        self.stmts: List[Type[ast.AST]] = []
         self.calls: List[str] = []
         self.prev: List[int] = []
         self.next: List[int] = []
@@ -71,7 +71,7 @@ class CFG:
         self.start: Optional[BasicBlock] = None
         self.func_calls: Dict[str, CFG] = {}
         self.blocks: Dict[int, BasicBlock] = {}
-        self.edges: Dict[Tuple[int, int], Type[_ast.AST]] = {}
+        self.edges: Dict[Tuple[int, int], Type[ast.AST]] = {}
         self.graph: Optional[gv.dot.Digraph] = None
 
     def _traverse(self, block: BasicBlock, visited: Set[int] = set(), calls: bool = True) -> None:
@@ -102,7 +102,7 @@ class CFG:
 
 
 class CFGVisitor(ast.NodeVisitor):
-    invertComparators: Dict[Type[_ast.AST], Type[_ast.AST]] = {ast.Eq: ast.NotEq, ast.NotEq: ast.Eq, ast.Lt: ast.GtE,
+    invertComparators: Dict[Type[ast.AST], Type[ast.AST]] = {ast.Eq: ast.NotEq, ast.NotEq: ast.Eq, ast.Lt: ast.GtE,
                                                                ast.LtE: ast.Gt,
                                                                ast.Gt: ast.LtE, ast.GtE: ast.Lt, ast.Is: ast.IsNot,
                                                                ast.IsNot: ast.Is, ast.In: ast.NotIn, ast.NotIn: ast.In}
@@ -111,7 +111,7 @@ class CFGVisitor(ast.NodeVisitor):
         super().__init__()
         self.loop_stack: List[BasicBlock] = []
 
-    def build(self, name: str, tree: Type[_ast.AST]) -> CFG:
+    def build(self, name: str, tree: Type[ast.AST]) -> CFG:
         self.cfg = CFG(name)
         self.curr_block = self.new_block()
         self.cfg.start = self.curr_block
@@ -125,7 +125,7 @@ class CFGVisitor(ast.NodeVisitor):
         self.cfg.blocks[bid] = BasicBlock(bid)
         return self.cfg.blocks[bid]
 
-    def add_stmt(self, block: BasicBlock, stmt: Type[_ast.AST]) -> None:
+    def add_stmt(self, block: BasicBlock, stmt: Type[ast.AST]) -> None:
         block.stmts.append(stmt)
 
     def add_edge(self, frm_id: int, to_id: int, condition=None) -> None:
@@ -141,11 +141,11 @@ class CFGVisitor(ast.NodeVisitor):
             self.add_edge(self.curr_block.bid, loop_block.bid)
             return loop_block
 
-    def add_subgraph(self, tree: Type[_ast.AST]) -> None:
+    def add_subgraph(self, tree: Type[ast.AST]) -> None:
         self.cfg.func_calls[tree.name] = CFGVisitor().build(tree.name, ast.Module(body=tree.body))
 
-    def add_condition(self, cond1: Optional[Type[_ast.AST]], cond2: Optional[Type[_ast.AST]]) -> Optional[
-        Type[_ast.AST]]:
+    def add_condition(self, cond1: Optional[Type[ast.AST]], cond2: Optional[Type[ast.AST]]) -> Optional[
+        Type[ast.AST]]:
         if cond1 and cond2:
             return ast.BoolOp(ast.And(), values=[cond1, cond2])
         else:
@@ -176,7 +176,7 @@ class CFGVisitor(ast.NodeVisitor):
                     self.remove_empty_blocks(self.cfg.blocks[next_bid], visited)
 
     # TODO: error condition a < b < c return b < a || b > c
-    def invert(self, node: Type[_ast.AST]) -> Type[_ast.AST]:
+    def invert(self, node: Type[ast.AST]) -> Type[ast.AST]:
         # bug
         if type(node) == ast.Compare:
             return ast.Compare(left=node.left, ops=[self.invertComparators[type(node.ops[0])]()],
