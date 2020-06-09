@@ -17,10 +17,8 @@ args = parser.parse_args()
 cfg_name = args.input_file.split('/')[-1]
 '''
 
-
-current_path = os.path.abspath(os.getcwd()) + "/exampleCode.py"
-print(current_path)
-with open(current_path, 'r') as f:
-    cfg = CFGVisitor().build("project", ast.parse(f.read()))
-    cfg.show()
-
+if __name__ == '__main__':
+    current_path = os.path.abspath(os.getcwd()) + "/exampleCode.py"
+    with open(current_path, 'r') as f:
+        cfg = CFGVisitor().build("project", ast.parse(f.read()))
+        cfg.show()

@@ -190,8 +190,10 @@ class CFGVisitor(ast.NodeVisitor):
         else:
             return ast.UnaryOp(op=ast.Not(), operand=node)
 
-    def visit_Expr(self, node):
-        self.temp_visit(node)
+    def generic_visit(self, node):
+        if type(node) in {ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Expr}:
+            self.add_stmt(self.curr_block, node)
+        super().generic_visit(node)
 
     def visit_Call(self, node):
         def visit_func(node):
@@ -210,22 +212,6 @@ class CFGVisitor(ast.NodeVisitor):
         func = node.func
         func_name = visit_func(func)
         self.curr_block.calls.append(func_name)
-
-    # Todo: rename temp_visit function name!!!
-    def temp_visit(self,node):
-        self.add_stmt(self.curr_block, node)
-        self.generic_visit(node)
-    # variable = variable
-    def visit_Assign(self, node):
-        self.temp_visit(node)
-
-    # variable : type
-    def visit_AnnAssign(self, node):
-        self.temp_visit(node)
-
-    # +=, -=, *=, /=, %=
-    def visit_AugAssign(self, node):
-        self.temp_visit(node)
 
     # try catch raise
     def visit_Raise(self, node):
@@ -379,15 +365,5 @@ class CFGVisitor(ast.NodeVisitor):
         self.curr_block = afteryield_block
 
 #     ToDo: extra visit function: lambada, try & catch, list comprihension, set comprehension, dictionary comprehesion
-
-
-# FIXME: section moved to test.py file
-'''
-current_path = os.path.dirname(__file__) + "/exampleCode.py"
-print(current_path)
-with open(current_path, 'r') as f:
-    cfg = CFGVisitor().build("test", ast.parse(f.read()))
-    cfg.show()
-'''
 
 # ToDo: unitest
