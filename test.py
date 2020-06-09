@@ -18,9 +18,9 @@ cfg_name = args.input_file.split('/')[-1]
 '''
 
 
-current_path = os.path.dirname(__file__) + "/exampleCode.py"
+current_path = os.path.abspath(os.getcwd()) + "/exampleCode.py"
 print(current_path)
 with open(current_path, 'r') as f:
-    cfg = CFGVisitor().build("steven", ast.parse(f.read()))
+    cfg = CFGVisitor().build("project", ast.parse(f.read()))
     cfg.show()
 

@@ -1,10 +1,13 @@
 from __future__ import annotations
-import os
 import _ast, ast, astor
 import graphviz as gv
 from typing import Dict, List, Tuple, Set, Optional, Type
 
-
+# TODO later: graph
+'''
+1. add a color dictionary for condition calls
+2. node shape (may be added into class Block)
+'''
 class SingletonMeta(type):
     _instance: Optional[BlockId] = None
 
@@ -15,11 +18,10 @@ class SingletonMeta(type):
 
 
 class BlockId(metaclass=SingletonMeta):
-
     counter: int = 0
 
     def gen(self) -> int:
-        self.counter+=1
+        self.counter += 1
         return self.counter
 
 
@@ -50,12 +52,13 @@ class BasicBlock:
         code = ''
         for stmt in self.stmts:
             line = astor.to_source(stmt)
-            code += line.split('\n')[0] + "\n" if type(stmt) in [ast.If, ast.For, ast.While, ast.FunctionDef, ast.AsyncFunctionDef] else line
+            code += line.split('\n')[0] + "\n" if type(stmt) in [ast.If, ast.For, ast.While, ast.FunctionDef,
+                                                                 ast.AsyncFunctionDef] else line
         return code
 
     def calls_to_code(self) -> str:
         return '\n'.join(self.calls)
-        
+
 
 class CFG:
 
@@ -74,14 +77,17 @@ class CFG:
     def _traverse(self, block: BasicBlock, visited: Set[int] = set(), calls: bool = True) -> None:
         if block.bid not in visited:
             visited.add(block.bid)
-            self.graph.node(str(block.bid), label = block.stmts_to_code())
+            self.graph.node(str(block.bid), label=block.stmts_to_code())
             if calls and block.calls:
-                self.graph.node(str(block.bid)+'_call', label=block.calls_to_code(), _attributes={'shape': 'box'})
-                self.graph.edge(str(block.bid), str(block.bid)+'_call', label="calls", _attributes={'style': 'dashed'})
+                self.graph.node(str(block.bid) + '_call', label=block.calls_to_code(), _attributes={'shape': 'box'})
+                self.graph.edge(str(block.bid), str(block.bid) + '_call', label="calls",
+                                _attributes={'style': 'dashed'})
 
             for next_bid in block.next:
                 self._traverse(self.blocks[next_bid], visited, calls=calls)
-                self.graph.edge(str(block.bid), str(next_bid), label=astor.to_source(self.edges[(block.bid, next_bid)]) if self.edges[(block.bid, next_bid)] else '')
+                self.graph.edge(str(block.bid), str(next_bid),
+                                label=astor.to_source(self.edges[(block.bid, next_bid)]) if self.edges[
+                                    (block.bid, next_bid)] else '')
 
     def _show(self, fmt: str = 'pdf', calls: bool = True) -> gv.dot.Digraph:
         self.graph = gv.Digraph(name=self.name, format=fmt, graph_attr={'label': self.name})
@@ -90,15 +96,16 @@ class CFG:
             self.graph.subgraph(v._show(fmt, calls))
         return self.graph
 
-    def show(self, filepath: str = './output', fmt: str = 'pdf', calls: bool =True, show: bool =True) -> None:
+    def show(self, filepath: str = './output', fmt: str = 'pdf', calls: bool = True, show: bool = True) -> None:
         self._show(fmt, calls)
         self.graph.render(filepath, view=show)
 
 
 class CFGVisitor(ast.NodeVisitor):
-
-    invertComparators: Dict[Type[_ast.AST], Type[_ast.AST]] = {ast.Eq: ast.NotEq, ast.NotEq: ast.Eq, ast.Lt: ast.GtE, ast.LtE: ast.Gt, 
-    ast.Gt: ast.LtE, ast.GtE: ast.Lt, ast.Is: ast.IsNot, ast.IsNot: ast.Is, ast.In: ast.NotIn, ast.NotIn: ast.In}
+    invertComparators: Dict[Type[_ast.AST], Type[_ast.AST]] = {ast.Eq: ast.NotEq, ast.NotEq: ast.Eq, ast.Lt: ast.GtE,
+                                                               ast.LtE: ast.Gt,
+                                                               ast.Gt: ast.LtE, ast.GtE: ast.Lt, ast.Is: ast.IsNot,
+                                                               ast.IsNot: ast.Is, ast.In: ast.NotIn, ast.NotIn: ast.In}
 
     def __init__(self):
         super().__init__()
@@ -137,7 +144,8 @@ class CFGVisitor(ast.NodeVisitor):
     def add_subgraph(self, tree: Type[_ast.AST]) -> None:
         self.cfg.func_calls[tree.name] = CFGVisitor().build(tree.name, ast.Module(body=tree.body))
 
-    def add_condition(self, cond1: Optional[Type[_ast.AST]], cond2: Optional[Type[_ast.AST]]) -> Optional[Type[_ast.AST]]:
+    def add_condition(self, cond1: Optional[Type[_ast.AST]], cond2: Optional[Type[_ast.AST]]) -> Optional[
+        Type[_ast.AST]]:
         if cond1 and cond2:
             return ast.BoolOp(ast.And(), values=[cond1, cond2])
         else:
@@ -152,7 +160,8 @@ class CFGVisitor(ast.NodeVisitor):
                     prev_block = self.cfg.blocks[prev_bid]
                     for next_bid in block.next:
                         next_block = self.cfg.blocks[next_bid]
-                        self.add_edge(prev_bid, next_bid, self.add_condition(self.cfg.edges[(prev_bid, block.bid)], self.cfg.edges[(block.bid, next_bid)]))
+                        self.add_edge(prev_bid, next_bid, self.add_condition(self.cfg.edges.get((prev_bid, block.bid)),
+                                                                             self.cfg.edges.get((block.bid, next_bid))))
                         self.cfg.edges.pop((block.bid, next_bid), None)
                         next_block.remove_from_prev(block.bid)
                     self.cfg.edges.pop((prev_bid, block.bid), None)
@@ -166,23 +175,23 @@ class CFGVisitor(ast.NodeVisitor):
                 for next_bid in block.next:
                     self.remove_empty_blocks(self.cfg.blocks[next_bid], visited)
 
+    # TODO: error condition a < b < c return b < a || b > c
     def invert(self, node: Type[_ast.AST]) -> Type[_ast.AST]:
         # bug
         if type(node) == ast.Compare:
-            return ast.Compare(left=node.left, ops=[self.invertComparators[type(node.ops[0])]()], comparators=node.comparators)
+            return ast.Compare(left=node.left, ops=[self.invertComparators[type(node.ops[0])]()],
+                               comparators=node.comparators)
         # ?
         elif isinstance(node, ast.BinOp) and type(node.op) in inverse:
             return ast.BinOp(node.left, self.invertComparators[type(node.op)](), node.right)
-            
+
         elif type(node) == ast.NameConstant and type(node.value) == bool:
             return ast.NameConstant(value=not node.value)
         else:
             return ast.UnaryOp(op=ast.Not(), operand=node)
 
-
     def visit_Expr(self, node):
-        self.add_stmt(self.curr_block, node)
-        self.generic_visit(node)
+        self.temp_visit(node)
 
     def visit_Call(self, node):
         def visit_func(node):
@@ -202,21 +211,27 @@ class CFGVisitor(ast.NodeVisitor):
         func_name = visit_func(func)
         self.curr_block.calls.append(func_name)
 
+    # Todo: rename temp_visit function name!!!
+    def temp_visit(self,node):
+        self.add_stmt(self.curr_block, node)
+        self.generic_visit(node)
+    # variable = variable
     def visit_Assign(self, node):
-        self.add_stmt(self.curr_block, node)
-        self.generic_visit(node)
+        self.temp_visit(node)
 
+    # variable : type
     def visit_AnnAssign(self, node):
-        self.add_stmt(self.curr_block, node)
-        self.generic_visit(node)
+        self.temp_visit(node)
 
+    # +=, -=, *=, /=, %=
     def visit_AugAssign(self, node):
-        self.add_stmt(self.curr_block, node)
-        self.generic_visit(node)
+        self.temp_visit(node)
 
+    # try catch raise
     def visit_Raise(self, node):
         pass
 
+    # assert type check
     def visit_Assert(self, node):
         self.add_stmt(self.curr_block, node)
         # New block for the case in which the assertion 'fails'.
@@ -231,6 +246,7 @@ class CFGVisitor(ast.NodeVisitor):
         self.curr_block = successblock
         self.generic_visit(node)
 
+    # if else statement
     def visit_If(self, node):
         # Add the If statement at the end of the current block.
         self.add_stmt(self.curr_block, node)
@@ -266,6 +282,7 @@ class CFGVisitor(ast.NodeVisitor):
         # Continue building the CFG in the after-if block.
         self.curr_block = afterif_block
 
+    # while loop
     def visit_While(self, node):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
@@ -295,6 +312,7 @@ class CFGVisitor(ast.NodeVisitor):
         self.curr_block = afterwhile_block
         self.loop_stack.pop()
 
+    # for loop
     def visit_For(self, node):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
@@ -347,6 +365,7 @@ class CFGVisitor(ast.NodeVisitor):
         self.generic_visit(node)
         self.curr_block = afterawait_block
 
+    # ToDO: final blocks to be add
     def visit_Return(self, node):
         self.add_stmt(self.curr_block, node)
         # self.cfg.finalblocks.append(self.curr_block)
@@ -359,6 +378,8 @@ class CFGVisitor(ast.NodeVisitor):
         self.add_edge(self.curr_block.bid, afteryield_block.bid)
         self.curr_block = afteryield_block
 
+#     ToDo: extra visit function: lambada, try & catch, list comprihension, set comprehension, dictionary comprehesion
+
 
 # FIXME: section moved to test.py file
 '''
@@ -368,3 +389,5 @@ with open(current_path, 'r') as f:
     cfg = CFGVisitor().build("test", ast.parse(f.read()))
     cfg.show()
 '''
+
+# ToDo: unitest
