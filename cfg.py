@@ -191,7 +191,14 @@ class CFGVisitor(ast.NodeVisitor):
             return ast.UnaryOp(op=ast.Not(), operand=node)
 
     def generic_visit(self, node):
-        if type(node) in {ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Expr}:
+        if type(node) in [ast.Import, ast.ImportFrom]:
+            self.add_stmt(self.curr_block, node)
+            return
+        if type(node) in [ast.FunctionDef, ast.AsyncFunctionDef]:
+            self.add_stmt(self.curr_block, node)
+            self.add_subgraph(node)
+            return
+        if type(node) in [ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Expr]:
             self.add_stmt(self.curr_block, node)
         super().generic_visit(node)
 
@@ -330,20 +337,6 @@ class CFGVisitor(ast.NodeVisitor):
 
     def visit_Continue(self, node):
         pass
-
-    def visit_Import(self, node):
-        self.add_stmt(self.curr_block, node)
-
-    def visit_ImportFrom(self, node):
-        self.add_stmt(self.curr_block, node)
-
-    def visit_FunctionDef(self, node):
-        self.add_stmt(self.curr_block, node)
-        self.add_subgraph(node)
-
-    def visit_AsyncFunctionDef(self, node):
-        self.add_stmt(self.curr_block, node)
-        self.add_subgraph(node)
 
     def visit_Await(self, node):
         afterawait_block = self.new_block()
