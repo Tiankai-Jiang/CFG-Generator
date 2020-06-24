@@ -80,8 +80,7 @@ class CFG:
             self.graph.node(str(block.bid), label=block.stmts_to_code())
             if calls and block.calls:
                 self.graph.node(str(block.bid) + '_call', label=block.calls_to_code(), _attributes={'shape': 'box'})
-                self.graph.edge(str(block.bid), str(block.bid) + '_call', label="calls",
-                                _attributes={'style': 'dashed'})
+                self.graph.edge(str(block.bid), str(block.bid) + '_call', label="calls", _attributes={'style': 'dashed'})
 
             for next_bid in block.next:
                 self._traverse(self.blocks[next_bid], visited, calls=calls)
@@ -90,7 +89,7 @@ class CFG:
                                     (block.bid, next_bid)] else '')
 
     def _show(self, fmt: str = 'pdf', calls: bool = True) -> gv.dot.Digraph:
-        self.graph = gv.Digraph(name=self.name, format=fmt, graph_attr={'label': self.name})
+        self.graph = gv.Digraph(name='cluster_'+self.name, format=fmt, graph_attr={'label': self.name})
         self._traverse(self.start, calls=calls)
         for k, v in self.func_calls.items():
             self.graph.subgraph(v._show(fmt, calls))
@@ -202,23 +201,18 @@ class CFGVisitor(ast.NodeVisitor):
             self.add_stmt(self.curr_block, node)
         super().generic_visit(node)
 
-    def visit_Call(self, node):
-        def visit_func(node):
-            if type(node) == ast.Name:
-                return node.id
-            elif type(node) == ast.Attribute:
-                # Recursion on series of calls to attributes.
-                func_name = visit_func(node.value)
-                func_name += "." + node.attr
-                return func_name
-            elif type(node) == ast.Str:
-                return node.s
-            elif type(node) == ast.Subscript:
-                return node.value.id
+    def get_function_name(self, node):
+        if type(node) == ast.Name:
+            return node.id
+        elif type(node) == ast.Attribute:
+            return self.get_function_name(node.value) + '.' + node.attr
+        elif type(node) == ast.Str:
+            return node.s
+        elif type(node) == ast.Subscript:
+            return node.value.id        
 
-        func = node.func
-        func_name = visit_func(func)
-        self.curr_block.calls.append(func_name)
+    def visit_Call(self, node):
+        self.curr_block.calls.append(self.get_function_name(node.func))
 
     # try catch raise
     def visit_Raise(self, node):
