@@ -143,8 +143,7 @@ class CFGVisitor(ast.NodeVisitor):
     def add_subgraph(self, tree: Type[ast.AST]) -> None:
         self.cfg.func_calls[tree.name] = CFGVisitor().build(tree.name, ast.Module(body=tree.body))
 
-    def add_condition(self, cond1: Optional[Type[ast.AST]], cond2: Optional[Type[ast.AST]]) -> Optional[
-        Type[ast.AST]]:
+    def add_condition(self, cond1: Optional[Type[ast.AST]], cond2: Optional[Type[ast.AST]]) -> Optional[Type[ast.AST]]:
         if cond1 and cond2:
             return ast.BoolOp(ast.And(), values=[cond1, cond2])
         else:
@@ -202,14 +201,16 @@ class CFGVisitor(ast.NodeVisitor):
         super().generic_visit(node)
 
     def get_function_name(self, node):
-        if type(node) == ast.Name:
-            return node.id
-        elif type(node) == ast.Attribute:
-            return self.get_function_name(node.value) + '.' + node.attr
-        elif type(node) == ast.Str:
-            return node.s
-        elif type(node) == ast.Subscript:
-            return node.value.id        
+        return {ast.Name: node.id, ast.Attribute: self.get_function_name(node.value) + '.' + node.attr,
+        ast.Str: node.s, ast.Subscript: node.value.id }.get(type(node), None)
+        # if type(node) == ast.Name:
+        #     return node.id
+        # elif type(node) == ast.Attribute:
+        #     return self.get_function_name(node.value) + '.' + node.attr
+        # elif type(node) == ast.Str:
+        #     return node.s
+        # elif type(node) == ast.Subscript:
+        #     return node.value.id        
 
     def visit_Call(self, node):
         self.curr_block.calls.append(self.get_function_name(node.func))
