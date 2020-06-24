@@ -201,16 +201,14 @@ class CFGVisitor(ast.NodeVisitor):
         super().generic_visit(node)
 
     def get_function_name(self, node):
-        return {ast.Name: node.id, ast.Attribute: self.get_function_name(node.value) + '.' + node.attr,
-        ast.Str: node.s, ast.Subscript: node.value.id }.get(type(node), None)
-        # if type(node) == ast.Name:
-        #     return node.id
-        # elif type(node) == ast.Attribute:
-        #     return self.get_function_name(node.value) + '.' + node.attr
-        # elif type(node) == ast.Str:
-        #     return node.s
-        # elif type(node) == ast.Subscript:
-        #     return node.value.id        
+        if type(node) == ast.Name:
+            return node.id
+        elif type(node) == ast.Attribute:
+            return self.get_function_name(node.value) + '.' + node.attr
+        elif type(node) == ast.Str:
+            return node.s
+        elif type(node) == ast.Subscript:
+            return node.value.id        
 
     def visit_Call(self, node):
         self.curr_block.calls.append(self.get_function_name(node.func))
