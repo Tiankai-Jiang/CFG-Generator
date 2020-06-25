@@ -186,19 +186,19 @@ class CFGVisitor(ast.NodeVisitor):
 
         elif type(node) == ast.NameConstant and type(node.value) == bool:
             return ast.NameConstant(value=not node.value)
-        else:
+        elif type(node) == ast.BoolOp:
             return self.boolinvert(node)
             # return ast.UnaryOp(op=ast.Not(), operand=node)
-
-    def boolinvert(self, node:Type[ast.AST]) -> Type[ast.AST]:
-        if type(node) == ast.BoolOp:
-            value = [self.invert(node.values[0]), self.invert(node.values[1])]
-            if type(node.op) == ast.Or:
-                return ast.BoolOp(values = value, op = ast.And())
-            elif type(node.op) == ast.And:
-                return ast.BoolOp(values = value, op = ast.Or())
         else:
             return ast.UnaryOp(op=ast.Not(), operand=node)
+    def boolinvert(self, node:Type[ast.AST]) -> Type[ast.AST]:
+        value = []
+        for item in node.values:
+            value.append(self.invert(item))
+        if type(node.op) == ast.Or:
+            return ast.BoolOp(values = value, op = ast.And())
+        elif type(node.op) == ast.And:
+            return ast.BoolOp(values = value, op = ast.Or())
 
     def generic_visit(self, node):
         if type(node) in [ast.Import, ast.ImportFrom]:

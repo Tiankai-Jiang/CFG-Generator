@@ -2,7 +2,6 @@ import argparse
 import os
 from cfg import CFGVisitor
 import _ast, ast, astor
-import interpreter
 
 # ToDo: open file from command line
 '''
