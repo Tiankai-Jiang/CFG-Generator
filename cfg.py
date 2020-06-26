@@ -2,7 +2,7 @@ from __future__ import annotations
 import ast, astor
 import graphviz as gv
 from typing import Dict, List, Tuple, Set, Optional, Type
-
+from astpretty import pprint
 # TODO later: graph
 '''
 1. add a color dictionary for condition calls
@@ -220,7 +220,7 @@ class CFGVisitor(ast.NodeVisitor):
         elif type(node) == ast.Str:
             return node.s
         elif type(node) == ast.Subscript:
-            return node.value.id        
+            return node.value.id
 
     def populate_body(self, body_list: List[Type[ast.AST]], to_bid: int) -> None:
         for child in body_list:
@@ -246,7 +246,7 @@ class CFGVisitor(ast.NodeVisitor):
     def visit_If(self, node):
         # Add the If statement at the end of the current block.
         self.add_stmt(self.curr_block, node)
-        
+
         # Create a block for the code after the if-else.
         afterif_block = self.new_block()
         # Create a new block for the body of the if.
@@ -278,7 +278,7 @@ class CFGVisitor(ast.NodeVisitor):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
         self.add_stmt(loop_guard, node)
-        
+
         # New block for the case where the test in the while is False.
         afterwhile_block = self.new_block()
         self.loop_stack.append(afterwhile_block)
@@ -338,6 +338,17 @@ class CFGVisitor(ast.NodeVisitor):
         # Continue in a new block but without any jump to it -> all code after
         # the return statement will not be included in the CFG.
         self.curr_block = self.new_block()
+
+    def visit_Try(self, node):
+        # Add the If statement at the end of the current block.
+        pprint(node)
+        print(">>>>>>>>>>>>>>>>>")
+        for i in node.handlers:
+            pprint(i)
+
+
+    def visit_Excepthandler(self,node):
+        print("blee")
 
 #     ToDo: extra visit function: lambada, try & catch, list comprihension, set comprehension, dictionary comprehesion
 

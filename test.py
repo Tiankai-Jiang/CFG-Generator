@@ -2,6 +2,7 @@ import argparse
 import os
 from cfg import CFGVisitor
 import _ast, ast, astor
+from astpretty import pprint
 import interpreter
 
 # ToDo: open file from command line
@@ -18,7 +19,11 @@ cfg_name = args.input_file.split('/')[-1]
 '''
 
 if __name__ == '__main__':
-    current_path = os.path.abspath(os.getcwd()) + "/exampleCode.py"
-    with open(current_path, 'r') as f:
-        cfg = CFGVisitor().build("project", ast.parse(f.read()))
+    example_path = os.path.abspath(os.getcwd()) + "/exampleCode.py"
+    try_catch_path = os.path.abspath(os.getcwd()) + "/example_try_catch.py"
+    with open(try_catch_path, 'r') as f:
+        tree = ast.parse(f.read())
+        # pprint(tree)
+        cfg = CFGVisitor().build("Project", tree)
         cfg.show()
+
