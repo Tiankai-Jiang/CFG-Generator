@@ -188,6 +188,7 @@ class CFGVisitor(ast.NodeVisitor):
             return self.UnaryopInvert(node)
         else:
             return ast.UnaryOp(op=ast.Not(), operand=node)
+            
     def UnaryopInvert(self, node: Type[ast.AST]) -> Type[ast.AST]:
         if type(node.op) == ast.UAdd:
             return ast.UnaryOp(op=ast.USub(),operand = node.operand)
@@ -390,17 +391,6 @@ class CFGVisitor(ast.NodeVisitor):
         # Continue in a new block but without any jump to it -> all code after
         # the return statement will not be included in the CFG.
         self.curr_block = self.new_block()
-
-    def visit_Try(self, node):
-        # Add the If statement at the end of the current block.
-        pprint(node)
-        print(">>>>>>>>>>>>>>>>>")
-        for i in node.handlers:
-            pprint(i)
-
-
-    def visit_Excepthandler(self,node):
-        print("blee")
 
 #     ToDo: extra visit function: lambada, try & catch, list comprihension, set comprehension, dictionary comprehesion
 
