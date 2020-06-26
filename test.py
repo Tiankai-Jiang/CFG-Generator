@@ -20,7 +20,6 @@ cfg_name = args.input_file.split('/')[-1]
 
 if __name__ == '__main__':
     example_path = os.path.abspath(os.getcwd()) + "/exampleCode.py"
-    try_catch_path = os.path.abspath(os.getcwd()) + "/example_try_catch.py"
     with open(example_path, 'r') as f:
         tree = ast.parse(f.read())
         # pprint(tree)

@@ -10,7 +10,8 @@ def func():
     except ValueError as ve:
         b += 1
     except ZeroDivisionError as ze:
-        raise ZeroDivisionError
+        while y + 1 < 100:
+            y += 10
     else:
         c += 1
     finally:
