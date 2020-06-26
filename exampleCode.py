@@ -1,5 +1,3 @@
-if (a or b) and c or d<1:
-    print('aaa')
-else:
-    a = 1
+while a<b<c:
+    a += 1
 return 0

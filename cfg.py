@@ -184,8 +184,19 @@ class CFGVisitor(ast.NodeVisitor):
             return ast.NameConstant(value=not node.value)
         elif type(node) == ast.BoolOp:
             return ast.BoolOp(values = [self.invert(x) for x in node.values], op = {ast.And: ast.Or(), ast.Or: ast.And()}.get(type(node.op)))
+        elif type(node) == ast.UnaryOp:
+            return self.UnaryopInvert(node)
         else:
             return ast.UnaryOp(op=ast.Not(), operand=node)
+    def UnaryopInvert(self, node: Type[ast.AST]) -> Type[ast.AST]:
+        if type(node.op) == ast.UAdd:
+            return ast.UnaryOp(op=ast.USub(),operand = node.operand)
+        elif type(node.op) == ast.USub:
+            return ast.UnaryOp(op=ast.UAdd(),operand = node.operand)
+        elif type(node.op) == ast.Invert:
+            return ast.UnaryOp(op=ast.Not(), operand=node)
+        else:
+            return node.operand
 
     # def boolinvert(self, node:Type[ast.AST]) -> Type[ast.AST]:
     #     value = []
