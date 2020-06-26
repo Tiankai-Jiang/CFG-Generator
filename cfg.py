@@ -188,7 +188,7 @@ class CFGVisitor(ast.NodeVisitor):
             return self.UnaryopInvert(node)
         else:
             return ast.UnaryOp(op=ast.Not(), operand=node)
-            
+
     def UnaryopInvert(self, node: Type[ast.AST]) -> Type[ast.AST]:
         if type(node.op) == ast.UAdd:
             return ast.UnaryOp(op=ast.USub(),operand = node.operand)
@@ -321,10 +321,9 @@ class CFGVisitor(ast.NodeVisitor):
         else:
             self.add_edge(after_try_block.bid, finally_block.bid)
 
-
-    # try catch raise
     def visit_Raise(self, node):
-        pass
+        self.add_stmt(self.curr_block, node)
+        self.curr_block = self.new_block()
 
     # while loop
     def visit_While(self, node):

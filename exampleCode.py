@@ -10,7 +10,7 @@ def func():
     except ValueError as ve:
         b += 1
     except ZeroDivisionError as ze:
-        return
+        raise ZeroDivisionError
     else:
         c += 1
     finally:
