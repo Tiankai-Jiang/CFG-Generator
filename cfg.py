@@ -276,6 +276,51 @@ class CFGVisitor(ast.NodeVisitor):
         # Continue building the CFG in the after-if block.
         self.curr_block = afterif_block
 
+    def visit_Try(self, node):
+        loop_guard = self.add_loop_block()
+        self.curr_block = loop_guard
+        self.add_stmt(loop_guard, ast.Try(body=[], handlers=[], orelse=[], finalbody=[]))
+
+        after_try_block = self.new_block()
+        self.add_stmt(after_try_block, ast.Name(id='handle errors', ctx=ast.Load()))
+        self.populate_body(node.body, after_try_block.bid)
+
+        self.curr_block = after_try_block
+
+        if node.handlers:
+            for handler in node.handlers:
+                before_handler_block = self.new_block()
+                self.curr_block = before_handler_block
+                self.add_edge(after_try_block.bid, before_handler_block.bid, handler.type)
+
+                after_handler_block = self.new_block()
+                self.add_stmt(after_handler_block, ast.Name(id='end except', ctx=ast.Load()))
+                self.populate_body(handler.body, after_handler_block.bid)
+                self.add_edge(after_handler_block.bid, after_try_block.bid)
+
+
+        if node.orelse:
+            before_else_block = self.new_block()
+            self.curr_block = before_else_block
+            self.add_edge(after_try_block.bid, before_else_block.bid, ast.Name(id='No Error', ctx=ast.Load()))
+
+            after_else_block = self.new_block()
+            self.add_stmt(after_else_block, ast.Name(id='end no error', ctx=ast.Load()))
+            self.populate_body(node.orelse, after_else_block.bid)
+            self.add_edge(after_else_block.bid, after_try_block.bid)
+
+        finally_block = self.new_block()
+        self.curr_block = finally_block
+
+        if node.finalbody:
+            self.add_edge(after_try_block.bid, finally_block.bid, ast.Name(id='Finally', ctx=ast.Load()))
+            after_finally_block = self.new_block()
+            self.populate_body(node.finalbody, after_finally_block.bid)
+            self.curr_block = after_finally_block
+        else:
+            self.add_edge(after_try_block.bid, finally_block.bid)
+
+
     # try catch raise
     def visit_Raise(self, node):
         pass
