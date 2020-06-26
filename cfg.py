@@ -84,9 +84,7 @@ class CFG:
 
             for next_bid in block.next:
                 self._traverse(self.blocks[next_bid], visited, calls=calls)
-                self.graph.edge(str(block.bid), str(next_bid),
-                                label=astor.to_source(self.edges[(block.bid, next_bid)]) if self.edges[
-                                    (block.bid, next_bid)] else '')
+                self.graph.edge(str(block.bid), str(next_bid), label=astor.to_source(self.edges[(block.bid, next_bid)]) if self.edges[(block.bid, next_bid)] else '')
 
     def _show(self, fmt: str = 'pdf', calls: bool = True) -> gv.dot.Digraph:
         self.graph = gv.Digraph(name='cluster_'+self.name, format=fmt, graph_attr={'label': self.name})
@@ -159,8 +157,7 @@ class CFGVisitor(ast.NodeVisitor):
                     prev_block = self.cfg.blocks[prev_bid]
                     for next_bid in block.next:
                         next_block = self.cfg.blocks[next_bid]
-                        self.add_edge(prev_bid, next_bid, self.add_condition(self.cfg.edges.get((prev_bid, block.bid)),
-                                                                             self.cfg.edges.get((block.bid, next_bid))))
+                        self.add_edge(prev_bid, next_bid, self.add_condition(self.cfg.edges.get((prev_bid, block.bid)), self.cfg.edges.get((block.bid, next_bid))))
                         self.cfg.edges.pop((block.bid, next_bid), None)
                         next_block.remove_from_prev(block.bid)
                     self.cfg.edges.pop((prev_bid, block.bid), None)
@@ -178,8 +175,7 @@ class CFGVisitor(ast.NodeVisitor):
     def invert(self, node: Type[ast.AST]) -> Type[ast.AST]:
         # bug
         if type(node) == ast.Compare:
-            return ast.Compare(left=node.left, ops=[self.invertComparators[type(node.ops[0])]()],
-                               comparators=node.comparators)
+            return ast.Compare(left=node.left, ops=[self.invertComparators[type(node.ops[0])]()], comparators=node.comparators)
         # ?
         elif isinstance(node, ast.BinOp) and type(node.op) in inverse:
             return ast.BinOp(node.left, self.invertComparators[type(node.op)](), node.right)
@@ -188,10 +184,9 @@ class CFGVisitor(ast.NodeVisitor):
             return ast.NameConstant(value=not node.value)
         elif type(node) == ast.BoolOp:
             return ast.BoolOp(values = [self.invert(x) for x in node.values], op = {ast.And: ast.Or(), ast.Or: ast.And()}.get(type(node.op)))
-            # return ast.UnaryOp(op=ast.Not(), operand=node)
         else:
             return ast.UnaryOp(op=ast.Not(), operand=node)
-            
+
     # def boolinvert(self, node:Type[ast.AST]) -> Type[ast.AST]:
     #     value = []
     #     for item in node.values:
