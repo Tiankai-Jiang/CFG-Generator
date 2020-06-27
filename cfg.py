@@ -209,6 +209,9 @@ class CFGVisitor(ast.NodeVisitor):
     #     elif type(node.op) == ast.And:
     #         return ast.BoolOp(values = value, op = ast.Or())
 
+    def combine_conditions(self, node_list: List[Type[ast.AST]]) -> Type[ast.AST]:
+        return node_list[0] if len(node_list) == 1 else ast.BoolOp(op=ast.And(), values = node_list)
+
     def generic_visit(self, node):
         if type(node) in [ast.Import, ast.ImportFrom]:
             self.add_stmt(self.curr_block, node)
@@ -305,7 +308,6 @@ class CFGVisitor(ast.NodeVisitor):
         # Continue building the CFG in the after-for block.
         self.curr_block = afterfor_block
 
-    # if else statement
     def visit_If(self, node):
         # Add the If statement at the end of the current block.
         self.add_stmt(self.curr_block, node)
@@ -335,12 +337,12 @@ class CFGVisitor(ast.NodeVisitor):
     def visit_ListComp_Rec(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
         if not generators:
             self.generic_visit(self.listCompReg[1].elt) # the location of the node may be wrong
-            if self.listCompReg[0]:
+            if self.listCompReg[0]: # bug if there is else statement in comprehension
                 return [ast.Expr(value=ast.Call(func=ast.Attribute(value=ast.Name(id=self.listCompReg[0], ctx=ast.Load()), attr='append', ctx=ast.Load()), args=[self.listCompReg[1].elt], keywords=[]))]
             else:
                 return [ast.Expr(value=self.listCompReg[1].elt)]
         else:
-            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[ast.If(test=generators[-1].ifs[0], body=self.visit_ListComp_Rec(generators[:-1]), orelse=[])] if generators[-1].ifs else self.visit_ListComp_Rec(generators[:-1]), orelse=[])]
+            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[ast.If(test=self.combine_conditions(generators[-1].ifs), body=self.visit_ListComp_Rec(generators[:-1]), orelse=[])] if generators[-1].ifs else self.visit_ListComp_Rec(generators[:-1]), orelse=[])]
 
     def visit_ListComp(self, node):
         try: # try may change to checking if self.listCompReg exists
@@ -373,7 +375,7 @@ class CFGVisitor(ast.NodeVisitor):
             else: # not supported yet
                 return [ast.Expr(value=self.setCompReg[1].elt)]
         else:
-            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[ast.If(test=generators[-1].ifs[0], body=self.visit_SetComp_Rec(generators[:-1]), orelse=[])] if generators[-1].ifs else self.visit_SetComp_Rec(generators[:-1]), orelse=[])]
+            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[ast.If(test=self.combine_conditions(generators[-1].ifs), body=self.visit_SetComp_Rec(generators[:-1]), orelse=[])] if generators[-1].ifs else self.visit_SetComp_Rec(generators[:-1]), orelse=[])]
 
     def visit_SetComp(self, node):
         try: # try may change to checking if self.setCompReg exists
@@ -383,7 +385,7 @@ class CFGVisitor(ast.NodeVisitor):
         finally:
             self.setCompReg = None
 
-    # Not tested: except with no specific error type
+    # TODO add condition "except" when no specific error.
     def visit_Try(self, node):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
@@ -428,7 +430,6 @@ class CFGVisitor(ast.NodeVisitor):
         else:
             self.add_edge(after_try_block.bid, finally_block.bid)
 
-    # while loop
     def visit_While(self, node):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
@@ -455,6 +456,6 @@ class CFGVisitor(ast.NodeVisitor):
     def visit_Yield(self, node):
         self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
 
-#     ToDo: extra visit function: lambada, try & catch, list comprihension, set comprehension, dictionary comprehesion
+#     ToDo: extra visit function: lambada, dictionary comprehesion
 
 # ToDo: unitest

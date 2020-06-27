@@ -1,5 +1,5 @@
-b = {print(x) for x in y if x > 5 for y in [1,2,3,4] if y==3}
-
+# b = {print(x) for x in y if x > 5 for y in [1,2,3,4] if y==3}
+a = [2*x for x in y if x > 0 ]
 # c += 1
 # for x in y:
 #     v += 1
