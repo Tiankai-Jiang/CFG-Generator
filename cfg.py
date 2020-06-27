@@ -252,16 +252,19 @@ class CFGVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Assign(self, node):
-        if type(node.value) in [ast.ListComp, ast.SetComp, ast.DictComp] and len(node.targets) == 1 and type(node.targets[0]) == ast.Name:
+        if type(node.value) in [ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp] and len(node.targets) == 1 and type(node.targets[0]) == ast.Name:
             if type(node.value) == ast.ListComp:
                 self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.List(elts=[], ctx=ast.Load())))
                 self.listCompReg = (node.targets[0].id, node.value)
             elif type(node.value) == ast.SetComp:
                 self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Call(func=ast.Name(id='set', ctx=ast.Load()), args=[], keywords=[])))
                 self.setCompReg = (node.targets[0].id, node.value)
-            else:
+            elif type(node.value) == ast.DictComp:
                 self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Dict(keys=[], values=[])))
                 self.dictCompReg = (node.targets[0].id, node.value)
+            else:
+                self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Call(func=ast.Name(id='__' + node.targets[0].id + 'Generator__', ctx=ast.Load()), args=[], keywords=[])))
+                self.genExpReg = (node.targets[0].id, node.value)
         else:
             self.add_stmt(self.curr_block, node)
         self.generic_visit(node)
@@ -299,7 +302,7 @@ class CFGVisitor(ast.NodeVisitor):
         finally:
             self.dictCompReg = None
 
-    # ignore the case when using set or dict comprehension but the result is not assigned to a variable
+    # ignore the case when using set or dict comprehension or generator expression but the result is not assigned to a variable
     def visit_Expr(self, node):
         if type(node.value) == ast.ListComp and type(node.value.elt) == ast.Call:
             self.listCompReg = (None, node.value)
@@ -324,6 +327,25 @@ class CFGVisitor(ast.NodeVisitor):
 
         # Continue building the CFG in the after-for block.
         self.curr_block = afterfor_block
+
+    def visit_GeneratorExp_Rec(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
+        if not generators:
+            self.generic_visit(self.genExpReg[1].elt) # the location of the node may be wrong
+            if self.genExpReg[0]: # bug if there is else statement in comprehension
+                return [ast.Expr(value=ast.Yield(value=self.genExpReg[1].elt))]
+        else:
+            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[ast.If(test=self.combine_conditions(generators[-1].ifs), body=self.visit_GeneratorExp_Rec(generators[:-1]), orelse=[])] if generators[-1].ifs else self.visit_GeneratorExp_Rec(generators[:-1]), orelse=[])]
+
+    def visit_GeneratorExp(self, node):
+        try: # try may change to checking if self.genExpReg exists
+            self.generic_visit(ast.FunctionDef(name='__' + self.genExpReg[0] + 'Generator__', 
+                args=ast.arguments(args=[], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]),
+                body = self.visit_GeneratorExp_Rec(self.genExpReg[1].generators), 
+                decorator_list=[], returns=None))
+        except:
+            pass
+        finally:
+            self.genExpReg = None
 
     def visit_If(self, node):
         # Add the If statement at the end of the current block.
