@@ -237,9 +237,6 @@ class CFGVisitor(ast.NodeVisitor):
         if not self.curr_block.next:
             self.add_edge(self.curr_block.bid, to_bid)
 
-    def visit_Call(self, node):
-        self.curr_block.calls.append(self.get_function_name(node.func))
-
     # assert type check
     def visit_Assert(self, node):
         self.add_stmt(self.curr_block, node)
@@ -250,6 +247,54 @@ class CFGVisitor(ast.NodeVisitor):
         # success block
         self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.test)
         self.generic_visit(node)
+
+    def visit_Assign(self, node):
+        # TODO dict and set comprehension
+        if type(node.value) in [ast.ListComp] and len(node.targets) == 1 and type(node.targets[0]) == ast.Name:
+            if type(node.value) == ast.ListComp:
+                self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.List(elts=[], ctx=ast.Load())))
+                self.listCompReg = node
+            # elif type(node.value) == ast.SetComp:
+            #     self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Set(elts=[], ctx=ast.Load())))
+            # else:
+            #     self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Dict(keys=[], values=[])))
+        else:
+            self.add_stmt(self.curr_block, node)
+        self.generic_visit(node)
+
+    def visit_Await(self, node):
+        afterawait_block = self.new_block()
+        self.add_edge(self.curr_block.bid, afterawait_block.bid)
+        self.generic_visit(node)
+        self.curr_block = afterawait_block
+
+    def visit_Break(self, node):
+        assert len(self.loop_stack), "Found break not inside loop"
+        self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid)
+
+    def visit_Call(self, node):
+        self.curr_block.calls.append(self.get_function_name(node.func))
+
+    def visit_Continue(self, node):
+        pass
+
+    def visit_For(self, node):
+        loop_guard = self.add_loop_block()
+        self.curr_block = loop_guard
+        self.add_stmt(self.curr_block, node)
+
+        # New block for the body of the for-loop.
+        for_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.iter)
+
+        # Block of code after the for loop.
+        afterfor_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
+        self.loop_stack.append(afterfor_block)
+        self.curr_block = for_block
+
+        self.populate_body(node.body, loop_guard.bid)
+
+        # Continue building the CFG in the after-for block.
+        self.curr_block = afterfor_block
 
     # if else statement
     def visit_If(self, node):
@@ -277,6 +322,36 @@ class CFGVisitor(ast.NodeVisitor):
 
         # Continue building the CFG in the after-if block.
         self.curr_block = afterif_block
+
+    def list_comp_helper(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
+        if not generators:
+            return [ast.Expr(value=ast.Call(func=ast.Attribute(value=ast.Name(id=self.listCompReg.targets[0].id, ctx=ast.Load()), attr='append', ctx=ast.Load()), args=[self.listCompReg.value.elt], keywords=[]))]
+        else:
+            # if generators[-1].ifs:
+            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[ast.If(test=generators[-1].ifs[0], body=self.list_comp_helper(generators[:-1]), orelse=[])] if generators[-1].ifs else self.list_comp_helper(generators[:-1]), orelse=[])]
+            # else:
+            #     return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=self.list_comp_helper(generators[:-1]), orelse=[])]
+
+    def visit_ListComp(self, node):
+        try:
+            self.generic_visit(ast.Module(self.list_comp_helper(self.listCompReg.value.generators)))
+        except:
+            pass
+
+    def visit_Pass(self, node):
+        self.add_stmt(self.curr_block, node)
+
+    def visit_Raise(self, node):
+        self.add_stmt(self.curr_block, node)
+        self.curr_block = self.new_block()
+        
+    # ToDO: final blocks to be add
+    def visit_Return(self, node):
+        self.add_stmt(self.curr_block, node)
+        # self.cfg.finalblocks.append(self.curr_block)
+        # Continue in a new block but without any jump to it -> all code after
+        # the return statement will not be included in the CFG.
+        self.curr_block = self.new_block()
 
     # Not tested: except with no specific error type
     def visit_Try(self, node):
@@ -323,10 +398,6 @@ class CFGVisitor(ast.NodeVisitor):
         else:
             self.add_edge(after_try_block.bid, finally_block.bid)
 
-    def visit_Raise(self, node):
-        self.add_stmt(self.curr_block, node)
-        self.curr_block = self.new_block()
-
     # while loop
     def visit_While(self, node):
         loop_guard = self.add_loop_block()
@@ -351,79 +422,8 @@ class CFGVisitor(ast.NodeVisitor):
         self.curr_block = afterwhile_block
         self.loop_stack.pop()
 
-    def visit_For(self, node):
-        loop_guard = self.add_loop_block()
-        self.curr_block = loop_guard
-        self.add_stmt(self.curr_block, node)
-
-        # New block for the body of the for-loop.
-        for_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.iter)
-
-        # Block of code after the for loop.
-        afterfor_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
-        self.loop_stack.append(afterfor_block)
-        self.curr_block = for_block
-
-        self.populate_body(node.body, loop_guard.bid)
-
-        # Continue building the CFG in the after-for block.
-        self.curr_block = afterfor_block
-
-    def visit_Break(self, node):
-        assert len(self.loop_stack), "Found break not inside loop"
-        self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid)
-
-    def visit_Assign(self, node):
-        # TODO dict and set comprehension
-        if type(node.value) in [ast.ListComp] and len(node.targets) == 1 and type(node.targets[0]) == ast.Name:
-            if type(node.value) == ast.ListComp:
-                self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.List(elts=[], ctx=ast.Load())))
-                self.listCompReg = node
-            # elif type(node.value) == ast.SetComp:
-            #     self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Set(elts=[], ctx=ast.Load())))
-            # else:
-            #     self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Dict(keys=[], values=[])))
-        else:
-            self.add_stmt(self.curr_block, node)
-        self.generic_visit(node)
-
-    def list_comp_helper(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
-        if not generators:
-            return [ast.Expr(value=ast.Call(func=ast.Attribute(value=ast.Name(id=self.listCompReg.targets[0].id, ctx=ast.Load()), attr='append', ctx=ast.Load()), args=[self.listCompReg.value.elt], keywords=[]))]
-        else:
-            # if generators[-1].ifs:
-            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[ast.If(test=generators[-1].ifs[0], body=self.list_comp_helper(generators[:-1]), orelse=[])] if generators[-1].ifs else self.list_comp_helper(generators[:-1]), orelse=[])]
-            # else:
-            #     return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=self.list_comp_helper(generators[:-1]), orelse=[])]
-
-    def visit_ListComp(self, node):
-        try:
-            self.generic_visit(ast.Module(self.list_comp_helper(self.listCompReg.value.generators)))
-        except:
-            pass
-
-    def visit_Pass(self, node):
-        self.add_stmt(self.curr_block, node)
-
-    def visit_Continue(self, node):
-        pass
-
-    def visit_Await(self, node):
-        afterawait_block = self.new_block()
-        self.add_edge(self.curr_block.bid, afterawait_block.bid)
-        self.generic_visit(node)
-        self.curr_block = afterawait_block
-
     def visit_Yield(self, node):
         self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
-
-    # ToDO: final blocks to be add
-    def visit_Return(self, node):
-        self.add_stmt(self.curr_block, node)
-        # self.cfg.finalblocks.append(self.curr_block)
-        # Continue in a new block but without any jump to it -> all code after
-        # the return statement will not be included in the CFG.
-        self.curr_block = self.new_block()
 
 #     ToDo: extra visit function: lambada, try & catch, list comprihension, set comprehension, dictionary comprehesion
 
