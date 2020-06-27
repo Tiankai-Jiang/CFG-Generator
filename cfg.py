@@ -351,18 +351,18 @@ class CFGVisitor(ast.NodeVisitor):
         self.curr_block = afterwhile_block
         self.loop_stack.pop()
 
-    # for loop
     def visit_For(self, node):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
         self.add_stmt(self.curr_block, node)
 
+        # New block for the body of the for-loop.
+        for_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.iter)
+
         # Block of code after the for loop.
         afterfor_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
         self.loop_stack.append(afterfor_block)
-
-        # New block for the body of the for-loop.
-        self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.iter)
+        self.curr_block = for_block
 
         self.populate_body(node.body, loop_guard.bid)
 
