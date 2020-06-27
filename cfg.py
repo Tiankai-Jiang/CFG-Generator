@@ -252,16 +252,16 @@ class CFGVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Assign(self, node):
-        # TODO dict and set comprehension
-        if type(node.value) in [ast.ListComp, ast.SetComp] and len(node.targets) == 1 and type(node.targets[0]) == ast.Name:
+        if type(node.value) in [ast.ListComp, ast.SetComp, ast.DictComp] and len(node.targets) == 1 and type(node.targets[0]) == ast.Name:
             if type(node.value) == ast.ListComp:
                 self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.List(elts=[], ctx=ast.Load())))
                 self.listCompReg = (node.targets[0].id, node.value)
             elif type(node.value) == ast.SetComp:
                 self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Call(func=ast.Name(id='set', ctx=ast.Load()), args=[], keywords=[])))
                 self.setCompReg = (node.targets[0].id, node.value)
-            # else:
-            #     self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Dict(keys=[], values=[])))
+            else:
+                self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Dict(keys=[], values=[])))
+                self.dictCompReg = (node.targets[0].id, node.value)
         else:
             self.add_stmt(self.curr_block, node)
         self.generic_visit(node)
@@ -281,6 +281,23 @@ class CFGVisitor(ast.NodeVisitor):
 
     def visit_Continue(self, node):
         pass
+
+    def visit_DictComp_Rec(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
+        if not generators:
+            if self.dictCompReg[0]: # bug if there is else statement in comprehension
+                return [ast.Assign(targets=[ast.Subscript(value=ast.Name(id=self.dictCompReg[0], ctx=ast.Load()), slice=ast.Index(value=self.dictCompReg[1].key), ctx=ast.Store())], value=self.dictCompReg[1].value)]
+            # else: # not supported yet
+            #     return [ast.Expr(value=self.dictCompReg[1].elt)]
+        else:
+            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[ast.If(test=self.combine_conditions(generators[-1].ifs), body=self.visit_DictComp_Rec(generators[:-1]), orelse=[])] if generators[-1].ifs else self.visit_DictComp_Rec(generators[:-1]), orelse=[])]
+
+    def visit_DictComp(self, node):
+        try: # try may change to checking if self.dictCompReg exists
+            self.generic_visit(ast.Module(self.visit_DictComp_Rec(self.dictCompReg[1].generators)))
+        except:
+            pass
+        finally:
+            self.dictCompReg = None
 
     # ignore the case when using set or dict comprehension but the result is not assigned to a variable
     def visit_Expr(self, node):
@@ -456,6 +473,6 @@ class CFGVisitor(ast.NodeVisitor):
     def visit_Yield(self, node):
         self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
 
-#     ToDo: extra visit function: lambada, dictionary comprehesion
+#     ToDo: extra visit function: lambada
 
 # ToDo: unitest
