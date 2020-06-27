@@ -1,4 +1,0 @@
-digraph cluster_Project {
-	graph [label=Project]
-	1 [label=""]
-}

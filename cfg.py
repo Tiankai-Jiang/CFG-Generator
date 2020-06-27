@@ -8,6 +8,7 @@ from astpretty import pprint
 1. add a color dictionary for condition calls
 2. node shape (may be added into class Block)
 '''
+
 class SingletonMeta(type):
     _instance: Optional[BlockId] = None
 
@@ -216,7 +217,7 @@ class CFGVisitor(ast.NodeVisitor):
             self.add_stmt(self.curr_block, node)
             self.add_subgraph(node)
             return
-        if type(node) in [ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Expr]:
+        if type(node) in [ast.AnnAssign, ast.AugAssign, ast.Expr]:
             self.add_stmt(self.curr_block, node)
         super().generic_visit(node)
 
@@ -277,6 +278,7 @@ class CFGVisitor(ast.NodeVisitor):
         # Continue building the CFG in the after-if block.
         self.curr_block = afterif_block
 
+    # Not tested: except with no specific error type
     def visit_Try(self, node):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
@@ -370,6 +372,38 @@ class CFGVisitor(ast.NodeVisitor):
     def visit_Break(self, node):
         assert len(self.loop_stack), "Found break not inside loop"
         self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid)
+
+    def visit_Assign(self, node):
+        # TODO dict and set comprehension
+        if type(node.value) in [ast.ListComp] and len(node.targets) == 1 and type(node.targets[0]) == ast.Name:
+            if type(node.value) == ast.ListComp:
+                self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.List(elts=[], ctx=ast.Load())))
+                self.listCompReg = node
+            # elif type(node.value) == ast.SetComp:
+            #     self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Set(elts=[], ctx=ast.Load())))
+            # else:
+            #     self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Dict(keys=[], values=[])))
+        else:
+            self.add_stmt(self.curr_block, node)
+        self.generic_visit(node)
+
+    def list_comp_helper(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
+        if not generators:
+            return [ast.Expr(value=ast.Call(func=ast.Attribute(value=ast.Name(id=self.listCompReg.targets[0].id, ctx=ast.Load()), attr='append', ctx=ast.Load()), args=[self.listCompReg.value.elt], keywords=[]))]
+        else:
+            # if generators[-1].ifs:
+            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[ast.If(test=generators[-1].ifs[0], body=self.list_comp_helper(generators[:-1]), orelse=[])] if generators[-1].ifs else self.list_comp_helper(generators[:-1]), orelse=[])]
+            # else:
+            #     return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=self.list_comp_helper(generators[:-1]), orelse=[])]
+
+    def visit_ListComp(self, node):
+        try:
+            self.generic_visit(ast.Module(self.list_comp_helper(self.listCompReg.value.generators)))
+        except:
+            pass
+
+    def visit_Pass(self, node):
+        self.add_stmt(self.curr_block, node)
 
     def visit_Continue(self, node):
         pass
