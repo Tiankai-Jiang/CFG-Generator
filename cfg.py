@@ -424,7 +424,6 @@ class CFGVisitor(ast.NodeVisitor):
         finally:
             self.setCompReg = None
 
-    # TODO add condition "except" when no specific error.
     def visit_Try(self, node):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
@@ -440,13 +439,12 @@ class CFGVisitor(ast.NodeVisitor):
             for handler in node.handlers:
                 before_handler_block = self.new_block()
                 self.curr_block = before_handler_block
-                self.add_edge(after_try_block.bid, before_handler_block.bid, handler.type)
+                self.add_edge(after_try_block.bid, before_handler_block.bid, handler.type if handler.type else ast.Name(id='Error', ctx=ast.Load()))
 
                 after_handler_block = self.new_block()
                 self.add_stmt(after_handler_block, ast.Name(id='end except', ctx=ast.Load()))
                 self.populate_body(handler.body, after_handler_block.bid)
                 self.add_edge(after_handler_block.bid, after_try_block.bid)
-
 
         if node.orelse:
             before_else_block = self.new_block()
@@ -495,6 +493,6 @@ class CFGVisitor(ast.NodeVisitor):
     def visit_Yield(self, node):
         self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
 
-#     ToDo: extra visit function: lambada
+#     ToDo: extra visit function: lambada, yield from
 
 # ToDo: unitest
