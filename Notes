@@ -1,7 +1,0 @@
-change code into standard format.
-remove 2 type of comments: #, ''' '''
-计算第一次出现的连续空格数量来觉得tab的格式
-
-
-TO DO:
-用autopep8 输出一个标准化后的python文件
