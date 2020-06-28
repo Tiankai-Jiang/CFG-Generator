@@ -388,6 +388,7 @@ class CFGVisitor(ast.NodeVisitor):
 
     def visit_Lambda(self, node):
         self.add_subgraph(ast.FunctionDef(name=self.lambdaReg[0], args=node.args, body = [ast.Return(value=node.body)], decorator_list=[], returns=None))
+        self.lambdaReg = None
 
     def visit_ListComp_Rec(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
         if not generators:
@@ -508,7 +509,5 @@ class CFGVisitor(ast.NodeVisitor):
 
     def visit_Yield(self, node):
         self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
-
-#     ToDo: extra visit function: lambada, yield from
 
 # ToDo: unitest

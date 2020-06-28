@@ -10,4 +10,4 @@
 
 # a = (print(x) for x in y if x > 4 for y in [1,2,3,4])
 
-a = lambda x, y: x+y
+a = lambda x: [2*y for y in x]
