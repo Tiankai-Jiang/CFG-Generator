@@ -233,6 +233,8 @@ class CFGVisitor(ast.NodeVisitor):
             return node.s
         elif type(node) == ast.Subscript:
             return node.value.id
+        elif type(node) == ast.Lambda:
+            return 'lambda function'
 
     def populate_body(self, body_list: List[Type[ast.AST]], to_bid: int) -> None:
         for child in body_list:
@@ -251,8 +253,9 @@ class CFGVisitor(ast.NodeVisitor):
         self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.test)
         self.generic_visit(node)
 
+    # TODO: change all those registers to stacks!
     def visit_Assign(self, node):
-        if type(node.value) in [ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp] and len(node.targets) == 1 and type(node.targets[0]) == ast.Name:
+        if type(node.value) in [ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, ast.Lambda] and len(node.targets) == 1 and type(node.targets[0]) == ast.Name: # is this entire statement necessary?
             if type(node.value) == ast.ListComp:
                 self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.List(elts=[], ctx=ast.Load())))
                 self.listCompReg = (node.targets[0].id, node.value)
@@ -262,9 +265,11 @@ class CFGVisitor(ast.NodeVisitor):
             elif type(node.value) == ast.DictComp:
                 self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Dict(keys=[], values=[])))
                 self.dictCompReg = (node.targets[0].id, node.value)
-            else:
+            elif type(node.value) == ast.GeneratorExp:
                 self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())], value=ast.Call(func=ast.Name(id='__' + node.targets[0].id + 'Generator__', ctx=ast.Load()), args=[], keywords=[])))
                 self.genExpReg = (node.targets[0].id, node.value)
+            else:
+                self.lambdaReg = (node.targets[0].id, node.value)
         else:
             self.add_stmt(self.curr_block, node)
         self.generic_visit(node)
@@ -280,7 +285,11 @@ class CFGVisitor(ast.NodeVisitor):
         self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid)
 
     def visit_Call(self, node):
-        self.curr_block.calls.append(self.get_function_name(node.func))
+        if type(node.func) == ast.Lambda:
+            self.lambdaReg = ('Anonymous Function', node.func)
+            self.generic_visit(node)
+        else:
+            self.curr_block.calls.append(self.get_function_name(node.func))
 
     def visit_Continue(self, node):
         pass
@@ -306,6 +315,10 @@ class CFGVisitor(ast.NodeVisitor):
     def visit_Expr(self, node):
         if type(node.value) == ast.ListComp and type(node.value.elt) == ast.Call:
             self.listCompReg = (None, node.value)
+        elif type(node.value) == ast.Lambda:
+            self.lambdaReg = ('Anonymous Function', node.value)
+        # elif type(node.value) == ast.Call and type(node.value.func) == ast.Lambda:
+        #     self.lambdaReg = ('Anonymous Function', node.value.func)
         else:
             self.add_stmt(self.curr_block, node)
         self.generic_visit(node)
@@ -372,6 +385,9 @@ class CFGVisitor(ast.NodeVisitor):
 
         # Continue building the CFG in the after-if block.
         self.curr_block = afterif_block
+
+    def visit_Lambda(self, node):
+        self.add_subgraph(ast.FunctionDef(name=self.lambdaReg[0], args=node.args, body = [ast.Return(value=node.body)], decorator_list=[], returns=None))
 
     def visit_ListComp_Rec(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
         if not generators:

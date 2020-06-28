@@ -8,4 +8,6 @@
 
 # celsius = {3*k:2*print(v) for (k,v) in fahrenheit.items()}
 
-a = (print(x) for x in y if x > 4 for y in [1,2,3,4])
+# a = (print(x) for x in y if x > 4 for y in [1,2,3,4])
+
+a = lambda x, y: x+y
