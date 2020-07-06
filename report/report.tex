@@ -1,0 +1,83 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath, amssymb, amscd, amsthm, amsfonts}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{commath}
+\usepackage{subfig}
+\usepackage{float}
+\oddsidemargin 0pt
+\evensidemargin 0pt
+\marginparwidth 40pt
+\marginparsep 10pt
+\topmargin -20pt
+\headsep 10pt
+\textheight 8.7in
+\textwidth 6.65in
+\linespread{1.5}
+
+\title{ECE653 Project Report}
+\author{Tiankai Jiang \and Steven Qin \and Huijie Chu}
+\date{\today}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{conjecture}[theorem]{Conjecture}
+
+\newcommand{\rr}{\mathbb{R}}
+
+\newcommand{\al}{\alpha}
+\DeclareMathOperator{\conv}{conv}
+\DeclareMathOperator{\aff}{aff}
+
+\makeatletter
+\setlength{\@fptop}{0pt}
+\makeatother
+\bibliographystyle{ieeetr}
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+ababababa
+\end{abstract}
+\section{Introduction}\label{section-introduction}
+\textbf{The Vertex Cover Problem:} given a graph $G=(V,E)$, a positive integer $K\leq \abs{V}$, $\exists V'\subseteq V,$\linebreak$\abs{V'} \leq K, \forall \{u,v\}\in E: \{u,v\}\cap V' \neq \emptyset$?\\
+\textbf{The CNF-SAT Problem:} given a boolean formula $f(x_1,\ldots ,x_n)$ in conjunctive normal form, is $f$ satisfiable? 
+
+Cook–Levin theorem states that Boolean Satisfiability Problem(\textbf{SAT}) is NP-complete. By reducing the SAT problem to CNF-SAT problem, we can prove the latter is also NP-complete. And by reducing CNF-SAT to Clique problem, which can be further reduced to Vertex Cover Problem, we know the Vertex Cover Problem is NP-complete as well. Hence, Vertex Cover Problem can be solved using a SAT solver by reducing it to CNF-SAT Problem.
+
+\section{The Reduction}\label{section-reduction}
+Given a graph $G=(V,E)$, let $n=\abs{V}$, let $x_i\{0, 1\}, i \in n$ denote if the $ith$ vertex is in the vertex cover, for a vertex cover of $k$ vertices, two conditions must be met\cite{Stamm-wilbrandt93programmingin} for a valid reduction:
+\begin{itemize}
+  \item For an arbitrary $e\langle u,v\rangle \in E$, at least one of $\{x_u,x_v\}$.
+  \item $\sum\limits_{i=1}^{n}x_i\leq k$
+\end{itemize}
+
+The first condition ensures that at least one vertex of an edge is selected therefore that edge is covered. And the second condition, which is called boolean cardinality constraint, ensures that there are at most k vertices selected.
+
+It is straightforward to express the first condition in conjunctive normal form:\[\bigwedge\limits_{\langle u,v\rangle \in E} x_u \lor x_v \]
+
+But it is not that easy for the second one. In fact, the encoding of cardinality constraint has a great impact on the performance of the SAT solver, which we will discuss in the next section.
+
+\section{Encoding of Boolean Cardinality Constraints}\label{section-encoding}
+We will present the sequential counter encoding and its advantage over the encoding given in ece650.a4.
+\subsection{The Sequential Counter Encoding}
+Given $x_1\ldots x_n$, the encoding introduces an extra of $(n-1)*k$ variables, denoted $s_{i,j}$, where $i \in [1,n-1], j\in [1,k]$. The $k$ variables in $s_{i,*}$ represent the number of variables in $x_1\ldots x_n$ that are true in base 1.
+
+Figure 1 shows the sequential counter circuit. Initially, the counter is set to 0. And the circuit will count the number of 1 in $x_1\ldots x_n$. As long as the overflow bit $c_i$ is not 1, $\sum\limits_{i=1}^{n}x_i\leq k$ holds.
+
+Figure 2(a) shows the implementation of the sub-circuit in Figure 1. The sub-circuit takes a number in base 1 from [$s_{i-1,1}$, $s_{i-1,k}$], add $x_i(0\;or\;1)$ and output the results as a number in base 1 to [$s_{i,1}$, $s_{i,k}$]. Figure 2(b) shows a demo when $k=4$. Suppose the input is 2(1100 in unary), and $x_i$ is 1, after the addition, the output will be 3(1110 in unary). If the input is 4(1111) instead, after adding $x_i=1$, the overflow bit $c_i$ is 1 and we will know that the result exceeds 4.
+
+The encoding are as follows:
+
+Since $x_i$ connects directly to an $OR$ gate in each sub-circuit, $s_{i,1}$ must be 1 if $x_i$ is 1.\[\bigwedge\limits_{i=1}^{n-1} \neg x_i \lor s_{i,1}\]
+
+Since there is no input in the first sub-circuit, the output of it is at most 1, which means $s_{1,2}$ to $s_{1,k}$ are guaranteed to be 0.\[\bigwedge\limits_{i=2}^{k} \neg s_{1,i}\]
+
+Since $s_{i-1,j}$ connects directly to an $OR$ gate in each sub-circuit, $s_{i,j}$ must be 1 if $s_{i-1,j}$ is 1.\[\bigwedge\limits_{i=2}^{n-1}\bigwedge\limits_{j=1}^{k}\neg s_{i-1,j} \lor s_{i,j}\]
+
+Since $x_i$ and $s_{i-1,j-1}$ are connected to a $AND$ gate and then the $AND$ gate connects to an $OR$ gate, $s_{i,j}$ must be 1 if $x_i$ and $s_{i-1,j-1}$ are both 1.\[\bigwedge\limits_{i=2}^{n-1}\bigwedge\limits_{j=2}^{k}\neg x_i\lor\neg s_{i-1,j-1} \lor s_{i,j}\]
+
+There should not be any overflow in all n sub-circuits.($i$ starts from 2 because there is no input for the first sub-circuit).\[\bigwedge\limits_{i=2}^{n-1}\neg x_i\lor\neg s_{i-1,k}\]
+
+\end{document}
