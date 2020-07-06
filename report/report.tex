@@ -5,6 +5,7 @@
 \usepackage{commath}
 \usepackage{subfig}
 \usepackage{float}
+\usepackage{listings}
 \oddsidemargin 0pt
 \evensidemargin 0pt
 \marginparwidth 40pt
@@ -46,29 +47,50 @@ One of the initial purposes of this project is to simplify the time consumption 
 
 Furthermore, a comprehensive control graph is essential in the phase of error detection. A missing or contradictory logical condition can create a bug that is laborious to fix. Without a thorough understanding and meticulously go through the logical transition in the program, the bug is arduous to trace. Paths on a control graph, along with their statements, instructions, or function calls, are visually represented. Thus, it is straightforward for a tester to go through suspicious paths without being anxious about getting lost in the flow of logic.
 
-\section{Overview}\label{section-overview}
+\section{Implementation}\label{section-implementation}
+\subsection{Preprocessing}
 
-\section{Purpose}\label{section-purpose}
+First of all, there is no point to analyze codes with syntax errors. So the first step is to read and compile the source code. Return immediately if the code cannot be compiled.
 
-\section{Encoding of Boolean Cardinality Constraints}\label{section-encoding}
-We will present the sequential counter encoding and its advantage over the encoding given in ece650.a4.
-\subsection{The Sequential Counter Encoding}
-Given $x_1\ldots x_n$, the encoding introduces an extra of $(n-1)*k$ variables, denoted $s_{i,j}$, where $i \in [1,n-1], j\in [1,k]$. The $k$ variables in $s_{i,*}$ represent the number of variables in $x_1\ldots x_n$ that are true in base 1.
+Most of the informal coding style of the input will not affect the output of ast module since it analyzes the code in a much lower level. 
+\begin{lstlisting}
+a=1; b = 1; c =\
+1
+d = [1,
+2,
+3]
+\end{lstlisting}
+is treated the same as
+\begin{lstlisting}
+a = 1
+b = 1
+c = 1
+d = [1, 2, 3]
+\end{lstlisting}
+In the above example, the spaces between variables and other variables/constants are ignored, the backslash to connect multi-line codes are ignored and the brackets/parentheses that expands multiple lines are ignored. Also, the semicolons that enable multiple statements in one line are omitted.
 
-Figure 1 shows the sequential counter circuit. Initially, the counter is set to 0. And the circuit will count the number of 1 in $x_1\ldots x_n$. As long as the overflow bit $c_i$ is not 1, $\sum\limits_{i=1}^{n}x_i\leq k$ holds.
+Also,
+\begin{lstlisting}
+a = 1 # this is a comment
+\end{lstlisting}
+is treated the same as
+\begin{lstlisting}
+a = 1
+\end{lstlisting}
 
-Figure 2(a) shows the implementation of the sub-circuit in Figure 1. The sub-circuit takes a number in base 1 from [$s_{i-1,1}$, $s_{i-1,k}$], add $x_i(0\;or\;1)$ and output the results as a number in base 1 to [$s_{i,1}$, $s_{i,k}$]. Figure 2(b) shows a demo when $k=4$. Suppose the input is 2(1100 in unary), and $x_i$ is 1, after the addition, the output will be 3(1110 in unary). If the input is 4(1111) instead, after adding $x_i=1$, the overflow bit $c_i$ is 1 and we will know that the result exceeds 4.
+However, multiline comments(doc strings), which are quoted by three single quotes or three double quotes are not ignored by python interpreter. They are treated as multi-line string but assigned to nothing. If the source code contains lots of doc strings, the control flow graph will be redundant and confusing. Hence, the second step is to remove the multiline comments. Using python's tokenize module, we only keep a string token if its previous token is not indentation, is not a new line and the token itself is not the first token in a module.
 
-The encoding are as follows:
+\subsection{AST Nodes}
 
-Since $x_i$ connects directly to an $OR$ gate in each sub-circuit, $s_{i,1}$ must be 1 if $x_i$ is 1.\[\bigwedge\limits_{i=1}^{n-1} \neg x_i \lor s_{i,1}\]
+\subsection{Models}
 
-Since there is no input in the first sub-circuit, the output of it is at most 1, which means $s_{1,2}$ to $s_{1,k}$ are guaranteed to be 0.\[\bigwedge\limits_{i=2}^{k} \neg s_{1,i}\]
+Class BasicBlock is the basic module to represent each node in the control flow graph. Each basic block contains a unique block id, two lists of block id to represent its previous and its next blocks, a list to store the functions that are called in this block and a list to store the statements in this block.
 
-Since $s_{i-1,j}$ connects directly to an $OR$ gate in each sub-circuit, $s_{i,j}$ must be 1 if $s_{i-1,j}$ is 1.\[\bigwedge\limits_{i=2}^{n-1}\bigwedge\limits_{j=1}^{k}\neg s_{i-1,j} \lor s_{i,j}\]
+To generate a unique block id for each new block and to avoid using global variables, a singleton class BlockId is used. The singleton class will keep track of the blockid. Each time a new block id is to generated, the same BlockId instance is called.
 
-Since $x_i$ and $s_{i-1,j-1}$ are connected to a $AND$ gate and then the $AND$ gate connects to an $OR$ gate, $s_{i,j}$ must be 1 if $x_i$ and $s_{i-1,j-1}$ are both 1.\[\bigwedge\limits_{i=2}^{n-1}\bigwedge\limits_{j=2}^{k}\neg x_i\lor\neg s_{i-1,j-1} \lor s_{i,j}\]
+Class CFG is the high level representation of a control flow graph and every function def in the input code will be an individual CFG. The CFG class keeps track of every blocks in the graph using a dictionary: blockid -$>$ basicblock. It also keeps track of every edges in the graph using a dictionary: (fromID, toID) -$>$ condition of the edge. Finally, it contains another dictionary to keep track of function calls in a function: function name -$>$ CFG.
 
-There should not be any overflow in all n sub-circuits.($i$ starts from 2 because there is no input for the first sub-circuit).\[\bigwedge\limits_{i=2}^{n-1}\neg x_i\lor\neg s_{i-1,k}\]
+Class CFGVisiter, which subclasses ast.NodeVisitor, is the main part of this project. According to the documentation of ast, ast.NodeVisitor is meant to be subclassed and we can define custom visit methods in the subclass. For example, if an ast node is of type $If$, its custom visit method should be defined in method $visit_If$. And if there is no customized visit method for a certain kind of node, it will be visited using $generic\_visit$ method. Below is the implementation of those custom visiting method.
 
+\subsection{visit\_*}
 \end{document}
