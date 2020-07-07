@@ -49,10 +49,9 @@ Furthermore, a comprehensive control graph is essential in the phase of error de
 
 \section{Implementation}\label{section-implementation}
 \subsection{Preprocessing}
+For the purpose of this project, which is to accurately generate a exhaustive control flow graph, there is no point to analyze codes with syntax errors. For the initial set up, the first step is to read and compile the source code. Error code that fails in the preparation step will be returned immediately after.
 
-First of all, there is no point to analyze codes with syntax errors. So the first step is to read and compile the source code. Return immediately if the code cannot be compiled.
-
-Most of the informal coding style of the input will not affect the output of ast module since it analyzes the code in a much lower level. 
+Most of the informal coding style of the input will not affect the output of ast module since it analyzes the code in a deeper level. As an example. consider the code below.
 \begin{lstlisting}
 a=1; b = 1; c =\
 1
@@ -60,37 +59,39 @@ d = [1,
 2,
 3]
 \end{lstlisting}
-is treated the same as
+As shown in the example, the Line separation symbol used above, $\backslash$ or equivalent, may seem to be a strange usage, whereas it does not conduct any syntax error which may prevent compile of the program. The more commonly adapted programming habit is demonstrated below.
 \begin{lstlisting}
 a = 1
 b = 1
 c = 1
 d = [1, 2, 3]
 \end{lstlisting}
-In the above example, the spaces between variables and other variables/constants are ignored, the backslash to connect multi-line codes are ignored and the brackets/parentheses that expands multiple lines are ignored. Also, the semicolons that enable multiple statements in one line are omitted.
+In the above example, the spaces between variables and other variables/constants are ignored, the backslash to connect multi-line codes are ignored and the brackets/parentheses that expands multiple lines are ignored. Also, the semicolons that enable multiple statements in one line are omitted. In order words, the compiler does not tend to standardize different programming styles. As long as it successfully passes the compilation. Typos, any symbols or usages from another coding language will be detected and handled as error behavior.
 
-Also,
+For anothe example, take a look at the code below.
 \begin{lstlisting}
 a = 1 # this is a comment
 \end{lstlisting}
-is treated the same as
+The previous code is identical with the one below.
 \begin{lstlisting}
 a = 1
 \end{lstlisting}
 
-However, multiline comments(doc strings), which are quoted by three single quotes or three double quotes are not ignored by python interpreter. They are treated as multi-line string but assigned to nothing. If the source code contains lots of doc strings, the control flow graph will be redundant and confusing. Hence, the second step is to remove the multiline comments. Using python's tokenize module, we only keep a string token if its previous token is not indentation, is not a new line and the token itself is not the first token in a module.
+In line comments that immediately follow the code part of the implementation will be read and ignored in the compiler. As an exception, multiline comments(doc strings), which are quoted between a pair of three single or double quotes are not ignored by python interpreter. They are treated as multi-line strings but assigned to any variable for display only. If the source code contains lots of doc strings, the control flow graph will be redundant and confusing. \\
+Hence, the second step is to remove the these multiline comments. Using python's tokenize module, we only keep a string token if its previous token is not indentation, is not a new line and the token itself is not the first token in a module. In the context below, standarized input stands for code blocks that can compile without raising any syntax error
 
 \subsection{AST Nodes}
+The standardized input source code is then parsed by the python AST module. AST stands for an abstract syntax tree. Therefore, a tree-like structure is generated after parsing, which means the result is either a basic subclass node of ast.AST, e.g. ast.Name, ast.Num, ast.Eq etc., or a recursive structure (an ast node inside a basic subclass node of ast.AST), e.g. ast.Delete( targets = [ast.Name( id='a', ctx=ast.Del() ) ] ). \\
+By recursively visiting and processing the parsed result, we can build the control flow graph of the input source code. Since each subclass of ast.AST has its structure/variables, different visiting methods are required. Those methods will be elucidated in the following subsections.
 
 \subsection{Models}
+Class BasicBlock is the supermodule that every node in the control flow graph inherits from. Each basic block structure contains a unique block id, two lists of block id to represent the previous and the neighboring block(blocks), a list to store the functions that are called inside the block, and a list to store the statements inside the block.
 
-Class BasicBlock is the basic module to represent each node in the control flow graph. Each basic block contains a unique block id, two lists of block id to represent its previous and its next blocks, a list to store the functions that are called in this block and a list to store the statements in this block.
+Each block is assigned with a unique id. To generate unique block id for new blocks and to prevent from using numerous global variables, a singleton class BlockId is used. The singleton class will keep track of every existing blockid and next available block id in case of a new block is generated. Each time a new block id is to generate, the same BlockId instance is called.
 
-To generate a unique block id for each new block and to avoid using global variables, a singleton class BlockId is used. The singleton class will keep track of the blockid. Each time a new block id is to generated, the same BlockId instance is called.
+Class CFG is the highest level representation of the control flow graph. Every function `def' in the input code will be treated as an individual CFG. The CFG class keeps track of every block in the graph using a dictionary with the format of \textit{blockid $\rightarrow$ basicblock}. It also keeps track of every edge in the graph using a dictionary in the format of \textit{(fromID, toID) $\rightarrow$ condition of the edge}. Finally, it contains another dictionary to keep track of function calls in a function in the format of \textit{function name $\rightarrow$ CFG}.
 
-Class CFG is the high level representation of a control flow graph and every function def in the input code will be an individual CFG. The CFG class keeps track of every blocks in the graph using a dictionary: blockid -$>$ basicblock. It also keeps track of every edges in the graph using a dictionary: (fromID, toID) -$>$ condition of the edge. Finally, it contains another dictionary to keep track of function calls in a function: function name -$>$ CFG.
-
-Class CFGVisiter, which subclasses ast.NodeVisitor, is the main part of this project. According to the documentation of ast, ast.NodeVisitor is meant to be subclassed and we can define custom visit methods in the subclass. For example, if an ast node is of type $If$, its custom visit method should be defined in method $visit_If$. And if there is no customized visit method for a certain kind of node, it will be visited using $generic\_visit$ method. Below is the implementation of those custom visiting method.
+Class CFGVisiter, which is a subclass from ast.NodeVisitor is the main part of this project. According to the documentation of ast, ast.NodeVisitor is meant to be subclassed and we can define custom visit methods in the subclass. For example, if an ast node is of type \textit{If}, its custom visit method should be defined in method \textit{visit\_If}. All visit functions must follow the conventional function naming style as required for the ast to recognize such function name. In the case, if there does not exist a customized visit method for a certain kind of node, this node will be visited using \textit{generic\_visit} method. Below is the implementation of those custom visiting methods.
 
 \subsection{visit\_*}
 \end{document}
