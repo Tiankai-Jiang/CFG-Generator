@@ -94,29 +94,29 @@ Class CFG is the highest level representation of the control flow graph. Every f
 Class CFGVisiter, which is a subclass from ast.NodeVisitor is the main part of this project. According to the documentation of ast, ast.NodeVisitor is meant to be subclassed and we can define custom visit methods in the subclass. For example, if an ast node is of type \textit{If}, its custom visit method should be defined in method \textit{visit\_If}. All visit functions must follow the conventional function naming style as required for the ast to recognize such function name. In the case, if there does not exist a customized visit method for a certain kind of node, this node will be visited using \textit{generic\_visit} method. Below is the implementation of those custom visiting methods.
 
 \subsection{visit\_*}
-Some type of nodes are not that interesting since we know there will not be other control flows inside the node. For example, the node of type augmentation assign, in which the value can only be Name(a += b), Constant(a += 1), Subscript(a += b[0]) or Attributes(a += c.val), will not lead to two or more successors in the CFG. For this kinds of nodes, we only have to add them to the current basic block and then move on. Those type of nodes are not mentioned below.
+Some type of visit functions, commonly seen in a function of variable assignation, that generate leaf nodes. According to its simple structure, there will not be another new control flows generated inside the node. For example, the node of type augmentation assign, in which the value can only be Name(a += b), Constant(a += 1), Subscript(a += b[0]) or Attributes(a += c.val), will not lead to two or more successors in the CFG. For these kinds of nodes, we only have to add them to the current basic block and then move on. Those types of nodes are not mentioned below.
 
 \subsubsection{Assign}
-Normally, the value of ast.Assign class is the same with ast.AugAssign, which means we only have to add it to the current block. For special cases, in which the value is list comprehension, dictionary comprehension, set comprehension, generator expression or lambda expression, we set the corresponding flag and visit those special nodes. So later in the corresponding visit method, e.g. \textit{visit\_ListComp}, we can get certain information from the flag and do some special operation.
+Normally, the value of ast.Assign class is identical with ast.AugAssign, which means we only have to add the assign statement to the current block. Whereas in special cases, in which the value is a list of comprehension, dictionary comprehension, set comprehension, generator expression, or lambda expression, we would tag a corresponding flag to those special nodes and recognize its type. Ensuring later in handling the corresponding visit method, e.g. \textit{visit\_ListComp}, we can get assertive information from the flag raised and perform the corresponding operation accordingly. (Section 2.4.6 demonstrate this point as an example in the variable assignment of a list comprehension)
 
 \subsubsection{Call}
-Except for the special case for lambda expression((lambda x: x+1)(1)), which is treated as a anonymous function call, we append the name of the function being called to a list in class CFG, so later we can show what functions are called in this function.
+Except for the special case under the class of lambda function((lambda x: x+1)(1)), which will be expressed in a further detailed section below, we append the name of the function being called to a list in class CFG. Thus, we can show what functions are called inside the current function as needed.
 
 \subsubsection{For}
-For the ast.For class, there will be an arrow(edge) pointing backwards to indicate loop. So, a new block, we called it \textit{h1}, must be added to be the head of that arrow. A \textit{for\_block} is created for the body part of the For statement. And an \textit{after\_for\_block} is created for codes after the For statement. We know that there is an edge from \textit{h1} to \textit{for\_block} and an edge from \textit{for\_block} to \textit{h1}. And when the For loop is over, there will be an edge from \textit{h1} to the \textit{after\_for\_block}. Since there may be nested loops, we use a stack to track the current For loop in order to find the correct block an edge pointing to.
+For the ast.For class, there will be an arrow(edge) pointing backwards to indicate loops. So, a new block, we called it \textit{h1}, must be added to be the head of that arrow. A \textit{for\_block} is created for the body part of the For statement. And an \textit{after\_for\_block} is created for codes after the For statement. We know that there is an edge from \textit{h1} to \textit{for\_block} and an edge from \textit{for\_block} to \textit{h1}. And when the For loop is over, there will be an edge from \textit{h1} to the \textit{after\_for\_block}. Since there may be nested loops, we use a stack to keep track of the loop chain in order to identify a current block and the reciprocal edges in relation with it.
 
 \subsubsection{If}
-The conditional expression is treated like a normal expression, and we append it to the current block. There are at least two blocks: one for statements in the body of if block, and one for statements after the whole If expressions. And if there is a Else in the If expression, there should be a third block for statements in the Else body. We do not have to consider Elif because in AST, all the logic are binary. An If-Elif-Else statement is treated as an If statement inside another If statement.
+The conditional statement is treated as a normal statement, and simply append it to the current block. There are at least two blocks generated from a statement: one for the statements in the context of the if block, and one for statements after the whole If expressions. And if there is an Else in the If expression, there should be the third block to handle statements inside the Else segment. We do not have to consider Elif because, in AST, all the logic is binary. A frequently implemented If-Elif-Else structure is treated as an If statement inside another If statement with their correlated else segment.
 
 \subsubsection{Lambda}
-Since lambda function is also a function call, we convert it to a function def by creating a new ast.FunctionDef class based on the lambda flag. So, the lambda function can be shown in a separate CFG.
+Since lambda function is also a function call, we convert it to a function definition by creating a new ast.FunctionDef class based on the lambda flag. So, the lambda function can be shown as an exclusive CFG but is displayed on the same graph subject to its principle measure.
 
 \subsubsection{List Comprehension}
-List Comprehension can be treated as appending to a list in multiple for loops and if statements. For example:
+List Comprehension can be splited and conducted as appending to a list in multiple for loops and if statements. For example:
 \begin{lstlisting}
 a = [2*x for x in y if x > 0 for y in z if len(y) > 3]
 \end{lstlisting}
-is the same as
+The expression above is the same as the implementation written below.
 \begin{lstlisting}
 a = []
 for y in z:
@@ -125,17 +125,18 @@ for y in z:
             if x > 0:
                 a.append(2*x)
 \end{lstlisting}
-So, we recursively construct a for loop if we find the list comprehension flag is set. The base case is that the generator field inside the list comprehension node is empty, under which condition we construct an append(). The recursive case is that the generator field is not empty, under which condition we construct a For statement(and an optional If statement) and make it the body of the outer level node. In the same way, set comprehension and dict comprehension can be constructed, and the only difference is the base case. Thus, they are not mentioned in this report.
+So, we recursively construct a for loop if we confirm the list comprehension flag is set. The base case is that the generator field inside the list comprehension node starts as an empty list, under which condition we iteratively construct an append(). The recursive case is that the generator field is not empty, under which condition we construct a For statement(and an optional If statement) and make it the body of the outer level node. In the same way, set comprehension and dictionary comprehension can be constructed. The only difference is implemented within the base case. Thus, we assume their concept is already covered in this section.
 
 \subsubsection{Try}
-We want the CFG to show the exception handling for each type of error. The format of the graph is similar to that of the For statement -- after handling each type of error, there will always be an edge pointing backwards to the end of the Try statement. And finally an edge pointing outwards from the end of the Try statement indicates the control flow keeps moving on. The actual implementation is slightly more complex because we have to consider multiple scenario -- the combination of Try-Except-Else-Finally.
+We want the CFG to show the exception handling for each type of error. The format of the graph is similar to that of the For statement -- after handling each type of error, there will always be an edge pointing backwards to the end of the Try statement. And finally an edge pointing outwards from the end of the Try statement indicates the control flow resumes. The actual implementation is slightly more complex because we have to consider multiple scenario -- unique combination from potential elements Try, Except, Else, and Finally.
 
 \subsubsection{While}
-Essentially, While statement is just another form of For statement. The implementation is basically the same for them.
+In substance, While statements are another form of loop statement. The implementation is essentially identical for the two types of loops, and we will not expand the section further.
+
 
 \subsubsection{Inversion of Logic}
-In the control flow graph, it is important to show the condition when the program takes that path. Sometimes the condition is not intuitive, for example, the condition of the Else statement. Based on different types of conditional statement, we proposed different methods to invert the condition to get when will the program exits the loop or how can the program take the Else path. We use a dictionary to store the inversion of comparators, e.g. ast.Gt() -$>$ ast.LtE(). If the condition node is a comparator, we return the dictionary lookup result. If the condition node is True/False, we return the opposite. If the condition node is a boolean formula, e.g. $a>1$ and $b<1$ or $c==0$, we flip it using De Morgan's law. For other conditions we just add a Not in front of the condition and return it.
+In the control flow graph, it is important to show the condition when the program traversal through paths. Sometimes the condition is not intuitive like the condition of an Else statement. Based on different types of conditional statement, we proposed different methods to invert the logical condition to demonstrate the accurate condition, as shown on the edge in the CFG, when the program exits the loop or introduce the Else path. We use a dictionary to store the inversion of different comparators, e.g. ast.Gt() $\rightarrow$ ast.LtE(). If the condition node is a comparator, we return the dictionary lookup result. If the condition node is True/False, we return the opposite. If the condition node is a boolean formula, e.g. $a>1 \land b<1 \lor c==0$, we flip it using De Morgan's law. For other convoluted conditions but scarce practical value, we just add a Not in front of the condition and return it.
 
 \subsection{Plotting}
-After traversing the entire AST, graphviz is used to plot the CFG. CFG is represented by a DiGraph object in graphviz. Using a set to record the visited nodes, we can build a directed graph from the starting basic block and avoid duplication.
+As mentioned in the abstract session, Graphviz is used to plot the CFG after traversing the entire AST is complete. CFG is represented by a DiGraph object in Graphviz. Using a set to record the visited nodes, we can build a directed graph from the starting basic block and eliminate duplication.
 \end{document}
