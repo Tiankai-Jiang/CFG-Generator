@@ -94,4 +94,17 @@ Class CFG is the highest level representation of the control flow graph. Every f
 Class CFGVisiter, which is a subclass from ast.NodeVisitor is the main part of this project. According to the documentation of ast, ast.NodeVisitor is meant to be subclassed and we can define custom visit methods in the subclass. For example, if an ast node is of type \textit{If}, its custom visit method should be defined in method \textit{visit\_If}. All visit functions must follow the conventional function naming style as required for the ast to recognize such function name. In the case, if there does not exist a customized visit method for a certain kind of node, this node will be visited using \textit{generic\_visit} method. Below is the implementation of those custom visiting methods.
 
 \subsection{visit\_*}
+Some type of nodes are not that interesting since we know there will not be other control flows inside the node. For example, the node of type augmentation assign, in which the value can only be Name(a += b), Constant(a += 1), Subscript(a += b[0]) or Attributes(a += c.val), will not lead to two or more successors in the CFG. For this kinds of nodes, we only have to add them to the current basic block and then move on. Those type of nodes are not mentioned below.
+
+\subsubsection{Assign}
+Normally, the value of ast.Assign class is the same with ast.AugAssign, which means we only have to add it to the current block. For special cases, in which the value is list comprehension, dictionary comprehension, set comprehension, generator expression or lambda expression, we set the corresponding flag and visit those special nodes. So later in the corresponding visit method, e.g. \textit{visit\_ListComp}, we can get certain information from the flag and do some special operation.
+
+\subsubsection{Call}
+Except for the special case for lambda expression((lambda x: x+1)(1)), which is treated as a anonymous function call, we append the name of the function being called to a list in class CFG, so later we can show what functions are called in this function.
+
+\subsubsection{For}
+For the ast.For class, there will be an arrow(edge) pointing backwards to indicate loop. So, a new block, we called it \textit{h1}, must be added to be the head of that arrow. A \textit{for\_block} is created for the body part of the For statement. And an \textit{after\_for\_block} is created for codes after the For statement. We know that there is an edge from \textit{h1} to \textit{for\_block} and an edge from \textit{for\_block} to \textit{h1}. And when the For loop is over, there will be an edge from \textit{h1} to the \textit{after\_for\_block}. Since there may be nested loops, we use a stack to track the current For loop in order to find the correct block an edge pointing to.
+
+\subsection{Plotting}
+After traversing the entire AST, graphviz is used to plot the CFG. CFG is represented by a DiGraph object in graphviz. Using a set to record the visited nodes, we can build a directed graph from the starting basic block and avoid duplication.
 \end{document}
