@@ -134,7 +134,7 @@ We want the CFG to show the exception handling for each type of error. The forma
 Essentially, While statement is just another form of For statement. The implementation is basically the same for them.
 
 \subsubsection{Inversion of Logic}
-
+In the control flow graph, it is important to show the condition when the program takes that path. Sometimes the condition is not intuitive, for example, the condition of the Else statement. Based on different types of conditional statement, we proposed different methods to invert the condition to get when will the program exits the loop or how can the program take the Else path. We use a dictionary to store the inversion of comparators, e.g. ast.Gt() -$>$ ast.LtE(). If the condition node is a comparator, we return the dictionary lookup result. If the condition node is True/False, we return the opposite. If the condition node is a boolean formula, e.g. $a>1$ and $b<1$ or $c==0$, we flip it using De Morgan's law. For other conditions we just add a Not in front of the condition and return it.
 
 \subsection{Plotting}
 After traversing the entire AST, graphviz is used to plot the CFG. CFG is represented by a DiGraph object in graphviz. Using a set to record the visited nodes, we can build a directed graph from the starting basic block and avoid duplication.
