@@ -41,6 +41,9 @@ class BasicBlock:
     def has_next(self) -> bool:
         return len(self.next) != 0
 
+    def has_previous(self) -> bool:
+        return len(self.prev) != 0
+
     def remove_from_prev(self, prev_bid: int) -> None:
         if prev_bid in self.prev:
             self.prev.remove(prev_bid)
@@ -100,6 +103,7 @@ class CFG:
 
 
 class CFGVisitor(ast.NodeVisitor):
+
     invertComparators: Dict[Type[ast.AST], Type[ast.AST]] = {ast.Eq: ast.NotEq, ast.NotEq: ast.Eq, ast.Lt: ast.GtE,
                                                                ast.LtE: ast.Gt,
                                                                ast.Gt: ast.LtE, ast.GtE: ast.Lt, ast.Is: ast.IsNot,
