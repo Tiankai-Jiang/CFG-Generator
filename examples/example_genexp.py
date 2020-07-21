@@ -1,0 +1,1 @@
+a = (2*x for x in y if x > 4 for y in [1,2,3,4])

@@ -1,0 +1,1 @@
+a = lambda x: 2 * x + 5 # cannot handle if else
