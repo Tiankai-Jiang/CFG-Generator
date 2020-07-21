@@ -344,6 +344,8 @@ class CFGVisitor(ast.NodeVisitor):
 
         # Continue building the CFG in the after-for block.
         self.curr_block = afterfor_block
+        for child in node.orelse:
+            self.visit(child)
 
     def visit_GeneratorExp_Rec(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
         if not generators:
@@ -509,6 +511,8 @@ class CFGVisitor(ast.NodeVisitor):
 
         # Continue building the CFG in the after-while block.
         self.curr_block = afterwhile_block
+        for child in node.orelse:
+            self.visit(child)
         self.loop_stack.pop()
 
     def visit_Yield(self, node):

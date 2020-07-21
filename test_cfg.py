@@ -1,19 +1,15 @@
-from unittest import TestCase
-from typing import Dict, List, Tuple, Set, Optional, Type
-import cfg, os, ast, astpretty
-import tracemalloc
+import cfg, os, ast, astpretty, unittest, tracemalloc
+
+# class TestBlockId(unittest.TestCase):
+
+#     def test_gen(self):
+#         assert cfg.BlockId().gen() == 0
+#         assert cfg.BlockId().gen() == 1
+#         assert cfg.BlockId().gen() == 2
+#         assert cfg.BlockId().gen() == 3
 
 
-class TestBlockId(TestCase):
-
-    def test_gen(self):
-        assert cfg.BlockId().gen() == 1
-        assert cfg.BlockId().gen() == 2
-        assert cfg.BlockId().gen() == 3
-        assert cfg.BlockId().gen() == 4
-
-
-class TestBasicBlock(TestCase):
+class TestBasicBlock(unittest.TestCase):
 
     def test_is_empty(self):
         # tracemalloc.start()
@@ -85,7 +81,7 @@ class TestBasicBlock(TestCase):
         for item in test.blocks:
             block1 = cfg.BasicBlock(item)
             for temp in test.blocks[item].stmts:
-                astpretty.pprint(temp)
+                # astpretty.pprint(temp)
 
                 block1.stmts.append(temp)
             self.assertEqual(block1.stmts_to_code(), "def test_function(a):\n")
@@ -105,19 +101,7 @@ class TestBasicBlock(TestCase):
                 block1.calls.append(temp.body[0].orelse[0].value.func.id)
         self.assertEqual(block1.calls_to_code(), "add\nsubstract")
 
-
-# class TestCFG(TestCase):
-#     def test__traverse(self):
-#         self.fail()
-#
-#     def test__show(self):
-#         self.fail()
-#
-#     def test_show(self):
-#         self.fail()
-#
-#
-# class TestCFGVisitor(TestCase):
+# class TestCFGVisitor(unittest.TestCase):
 #     def test_build(self):
 #         self.fail()
 #
@@ -233,3 +217,5 @@ class TestBasicBlock(TestCase):
 #         self.fail()
 #
 #
+if __name__ == '__main__':
+    unittest.main()
