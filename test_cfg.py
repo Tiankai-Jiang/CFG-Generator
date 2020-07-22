@@ -1,12 +1,14 @@
 import cfg, os, ast, astpretty, unittest, tracemalloc
 
-# class TestBlockId(unittest.TestCase):
+class TestBlockId(unittest.TestCase):
 
-#     def test_gen(self):
-#         assert cfg.BlockId().gen() == 0
-#         assert cfg.BlockId().gen() == 1
-#         assert cfg.BlockId().gen() == 2
-#         assert cfg.BlockId().gen() == 3
+    def test_gen(self):
+        a = cfg.BlockId().gen()
+
+        assert cfg.BlockId().gen() == a + 1
+        assert cfg.BlockId().gen() == a + 2
+        assert cfg.BlockId().gen() == a + 3
+        assert cfg.BlockId().gen() == a + 4
 
 
 class TestBasicBlock(unittest.TestCase):
@@ -15,7 +17,7 @@ class TestBasicBlock(unittest.TestCase):
         # tracemalloc.start()
 
         # test 1: empty class
-        example_path = os.path.abspath(os.getcwd()) + "/test_emptyclass.py"
+        example_path = os.path.abspath(os.getcwd()) + "/examples/test_emptyclass.py"
         with open(example_path, 'r') as f:
             tree = ast.parse(f.read())
 
@@ -26,7 +28,7 @@ class TestBasicBlock(unittest.TestCase):
         self.assertTrue(test.start.is_empty())
 
         # test2: non empty class
-        example_path = os.path.abspath(os.getcwd()) + "/test_non_emptyclass.py"
+        example_path = os.path.abspath(os.getcwd()) + "/examples/test_non_emptyclass.py"
         with open(example_path, 'r') as f:
             tree = ast.parse(f.read())
         test = cfg.CFGVisitor().build("Test", tree)
@@ -73,7 +75,7 @@ class TestBasicBlock(unittest.TestCase):
 
     def test_stmts_to_code(self):
 
-        example_path = os.path.abspath(os.getcwd()) + "/test_non_emptyclass.py"
+        example_path = os.path.abspath(os.getcwd()) + "/examples/test_non_emptyclass.py"
         with open(example_path, 'r') as f:
             tree = ast.parse(f.read())
         test = cfg.CFGVisitor().build("Test", tree)
@@ -89,7 +91,7 @@ class TestBasicBlock(unittest.TestCase):
     def test_calls_to_code(self):
         block1 = cfg.BasicBlock(1)
 
-        example_path = os.path.abspath(os.getcwd()) + "/test_functionCalls.py"
+        example_path = os.path.abspath(os.getcwd()) + "/examples/test_functionCalls.py"
         with open(example_path, 'r') as f:
             tree = ast.parse(f.read())
         test = cfg.CFGVisitor().build("Test", tree)
@@ -101,30 +103,43 @@ class TestBasicBlock(unittest.TestCase):
                 block1.calls.append(temp.body[0].orelse[0].value.func.id)
         self.assertEqual(block1.calls_to_code(), "add\nsubstract")
 
+
 # class TestCFGVisitor(unittest.TestCase):
 #     def test_build(self):
-#         self.fail()
+#         block1 = cfg.BasicBlock(1)
 #
-#     def test_new_block(self):
-#         self.fail()
+#         example_path = os.path.abspath(os.getcwd()) + "/examples/example_call.py"
+#         with open(example_path, 'r') as f:
+#             tree = ast.parse(f.read())
+#         test = cfg.CFGVisitor().build("Example_Call", tree)
 #
-#     def test_add_stmt(self):
-#         self.fail()
-#
-#     def test_add_edge(self):
-#         self.fail()
-#
-#     def test_add_loop_block(self):
-#         self.fail()
-#
-#     def test_add_subgraph(self):
-#         self.fail()
-#
-#     def test_add_condition(self):
-#         self.fail()
-#
-#     def test_remove_empty_blocks(self):
-#         self.fail()
+#         for item in test.blocks:
+#             for temp in test.blocks[item].stmts:
+#                 # astpretty.pprint(temp)
+#                 block1.calls.append(temp.body[0].body[0].value.func.id)
+#                 block1.calls.append(temp.body[0].orelse[0].value.func.id)
+#         self.assertEqual(block1.calls_to_code(), "add\nsubstract")
+
+    # def test_new_block(self):
+    #     self.fail()
+    #
+    # def test_add_stmt(self):
+    #     self.fail()
+    #
+    # def test_add_edge(self):
+    #     self.fail()
+    #
+    # def test_add_loop_block(self):
+    #     self.fail()
+    #
+    # def test_add_subgraph(self):
+    #     self.fail()
+    #
+    # def test_add_condition(self):
+    #     self.fail()
+    #
+    # def test_remove_empty_blocks(self):
+    #     self.fail()
 #
 #     def test_invert(self):
 #         self.fail()
@@ -215,7 +230,6 @@ class TestBasicBlock(unittest.TestCase):
 #
 #     def test_visit_yield(self):
 #         self.fail()
-#
-#
+
 if __name__ == '__main__':
     unittest.main()

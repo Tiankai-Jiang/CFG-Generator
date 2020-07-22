@@ -3,7 +3,6 @@ import os
 from cfg import CFGVisitor
 import _ast, ast, astor
 from astpretty import pprint
-import interpreter
 
 # ToDo: open file from command line
 '''
