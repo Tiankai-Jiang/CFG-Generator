@@ -1,1 +1,1 @@
-a = lambda x: 2 * x + 5 # cannot handle if else
+a = lambda x: 2 * x + 5 if x > 10 else 10 if x == 10 else 3 * x

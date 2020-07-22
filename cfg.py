@@ -112,6 +112,7 @@ class CFGVisitor(ast.NodeVisitor):
     def __init__(self):
         super().__init__()
         self.loop_stack: List[BasicBlock] = []
+        self.ifExp = False
 
     def build(self, name: str, tree: Type[ast.AST]) -> CFG:
         self.cfg = CFG(name)
@@ -392,7 +393,14 @@ class CFGVisitor(ast.NodeVisitor):
         # Continue building the CFG in the after-if block.
         self.curr_block = afterif_block
 
-    def visit_Lambda(self, node):
+    def visit_IfExp_Rec(self, node: Type[ast.AST]) -> List[Type[ast.AST]]:
+        return [ast.If(test=node.test, body=[ast.Return(value=node.body)], orelse=self.visit_IfExp_Rec(node.orelse) if type(node.orelse) == ast.IfExp else [ast.Return(value=node.orelse)])]
+
+    def visit_IfExp(self, node):
+        if self.ifExp:
+            self.generic_visit(ast.Module(self.visit_IfExp_Rec(node)))
+
+    def visit_Lambda(self, node): # deprecated since there is autopep8
         self.add_subgraph(ast.FunctionDef(name=self.lambdaReg[0], args=node.args, body = [ast.Return(value=node.body)], decorator_list=[], returns=None))
         self.lambdaReg = None
 
@@ -423,7 +431,12 @@ class CFGVisitor(ast.NodeVisitor):
 
     # ToDO: final blocks to be add
     def visit_Return(self, node):
-        self.add_stmt(self.curr_block, node)
+        if type(node.value) == ast.IfExp:
+            self.ifExp = True
+            self.generic_visit(node)
+            self.ifExp = False
+        else:
+            self.add_stmt(self.curr_block, node)
         # self.cfg.finalblocks.append(self.curr_block)
         # Continue in a new block but without any jump to it -> all code after
         # the return statement will not be included in the CFG.
