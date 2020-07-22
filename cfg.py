@@ -333,7 +333,7 @@ class CFGVisitor(ast.NodeVisitor):
         self.curr_block = loop_guard
         self.add_stmt(self.curr_block, node)
         # New block for the body of the for-loop.
-        for_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.iter)
+        for_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
         if not node.orelse:
             # Block of code after the for loop.
             afterfor_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
@@ -344,13 +344,12 @@ class CFGVisitor(ast.NodeVisitor):
         else:
             # Block of code after the for loop.
             afterfor_block = self.new_block()
-            orelse_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
+            orelse_block = self.add_edge(self.curr_block.bid, self.new_block().bid, ast.Name(id='else', ctx=ast.Load()))
             self.loop_stack.append(afterfor_block)
             self.curr_block = for_block
 
             self.populate_body(node.body, loop_guard.bid)
 
-            # Continue building the CFG in the after-for block.
             self.curr_block = orelse_block
             for child in node.orelse:
                 self.visit(child)
