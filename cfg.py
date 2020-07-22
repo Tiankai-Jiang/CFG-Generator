@@ -177,15 +177,17 @@ class CFGVisitor(ast.NodeVisitor):
                 for next_bid in block.next:
                     self.remove_empty_blocks(self.cfg.blocks[next_bid], visited)
 
-    # TODO: error condition a < b < c return b < a || b > c
     def invert(self, node: Type[ast.AST]) -> Type[ast.AST]:
-        # bug
         if type(node) == ast.Compare:
-            return ast.Compare(left=node.left, ops=[self.invertComparators[type(node.ops[0])]()], comparators=node.comparators)
-        # ?
+            if len(node.ops) == 1:
+                return ast.Compare(left=node.left, ops=[self.invertComparators[type(node.ops[0])]()], comparators=node.comparators)
+            else:
+                tmpNode = ast.BoolOp(op=ast.And(), values = [ast.Compare(left=node.left, ops=[node.ops[0]], comparators=[node.comparators[0]])])
+                for i in range(0, len(node.ops) - 1):
+                    tmpNode.values.append(ast.Compare(left=node.comparators[i], ops=[node.ops[i+1]], comparators=[node.comparators[i+1]]))
+                return self.invert(tmpNode)
         elif isinstance(node, ast.BinOp) and type(node.op) in self.invertComparators:
             return ast.BinOp(node.left, self.invertComparators[type(node.op)](), node.right)
-
         elif type(node) == ast.NameConstant and type(node.value) == bool:
             return ast.NameConstant(value=not node.value)
         elif type(node) == ast.BoolOp:
