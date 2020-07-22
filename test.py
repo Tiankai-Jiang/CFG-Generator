@@ -1,6 +1,7 @@
 import argparse
 import os
-from cfg import CFGVisitor
+from cfg import CFGVisitor, PyParser
+
 import _ast, ast, astor
 from astpretty import pprint
 
@@ -18,13 +19,14 @@ cfg_name = args.input_file.split('/')[-1]
 '''
 
 if __name__ == '__main__':
-    file_names = ["test_emptyclass.py", "example2.py", "example3.py", "example4.py"]
-    example_path = os.path.abspath(os.getcwd()) + "/test_emptyclass.py"
+    example_path = os.path.abspath(os.getcwd()) + "/examples/example_call.py"
     with open(example_path, 'r') as f:
-        a = f.read()
-        print(type(a))
-        tree = ast.parse(a)
-        # pprint(tree)
+        source = f.read()
+        parser = PyParser(source)
+        parser.removeCommentsAndDocstrings()
+        parser.formatCode()
+        tree = ast.parse(parser.script)
+        pprint(tree)
         cfg = CFGVisitor().build("Project", tree)
         cfg.show()
 
