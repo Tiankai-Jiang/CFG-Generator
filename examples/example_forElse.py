@@ -1,6 +1,12 @@
 digits = [0, 1, 5]
 
 for i in digits:
-    print(i)
+    a += i
+    if i == 5:
+        print("5 in list")
+        break
 else:
-    print("No items left.")
+    print("out of the loop")
+
+a += 1
+b += 2
