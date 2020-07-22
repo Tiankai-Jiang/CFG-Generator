@@ -287,7 +287,7 @@ class CFGVisitor(ast.NodeVisitor):
 
     def visit_Break(self, node):
         assert len(self.loop_stack), "Found break not inside loop"
-        self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid)
+        self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid, ast.Break())
 
     def visit_Call(self, node):
         if type(node.func) == ast.Lambda:
@@ -507,25 +507,35 @@ class CFGVisitor(ast.NodeVisitor):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
         self.add_stmt(loop_guard, node)
-
         # New block for the case where the test in the while is False.
         afterwhile_block = self.new_block()
         self.loop_stack.append(afterwhile_block)
         inverted_test = self.invert(node.test)
-        # Skip shortcut loop edge if while True:
-        if not (isinstance(inverted_test, ast.NameConstant) and inverted_test.value == False):
-            self.add_edge(self.curr_block.bid, afterwhile_block.bid, inverted_test)
 
-        # New block for the case where the test in the while is True.
-        # Populate the while block.
-        self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.test)
+        if not node.orelse:
+            # Skip shortcut loop edge if while True:
+            if not (isinstance(inverted_test, ast.NameConstant) and inverted_test.value == False):
+                self.add_edge(self.curr_block.bid, afterwhile_block.bid, inverted_test)
 
-        self.populate_body(node.body, loop_guard.bid)
+            # New block for the case where the test in the while is True.
+            # Populate the while block.
+            self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.test)
+
+            self.populate_body(node.body, loop_guard.bid)
+        else:
+            orelse_block = self.new_block()
+            if not (isinstance(inverted_test, ast.NameConstant) and inverted_test.value == False):
+                self.add_edge(self.curr_block.bid, orelse_block.bid, inverted_test)
+            self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.test)
+
+            self.populate_body(node.body, loop_guard.bid)
+            self.curr_block = orelse_block
+            for child in node.orelse:
+                self.visit(child)
+            self.add_edge(orelse_block.bid, afterwhile_block.bid)
 
         # Continue building the CFG in the after-while block.
         self.curr_block = afterwhile_block
-        for child in node.orelse:
-            self.visit(child)
         self.loop_stack.pop()
 
     def visit_Yield(self, node):
