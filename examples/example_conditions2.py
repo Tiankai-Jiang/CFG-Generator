@@ -1,4 +1,4 @@
-if a < b > c:
+if(a and b) or (c and d):
     a += 1
     b += 1
 else:

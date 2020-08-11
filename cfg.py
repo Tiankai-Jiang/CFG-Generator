@@ -99,7 +99,7 @@ class CFG:
 
     def show(self, filepath: str = './output', fmt: str = 'pdf', calls: bool = True, show: bool = True) -> None:
         self._show(fmt, calls)
-        self.graph.render(filepath, view=show)
+        self.graph.render(filepath, view=show, cleanup=True)
 
 
 class CFGVisitor(ast.NodeVisitor):

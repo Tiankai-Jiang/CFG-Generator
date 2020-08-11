@@ -1,1 +1,1 @@
-a = [2 * x for x in y if x > 0 for y in z if len(y) < 3]
+a = [2 * x for x in y if x > 0 for y in z if y[0] < 3]
