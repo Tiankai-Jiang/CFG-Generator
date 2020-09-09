@@ -2,7 +2,7 @@ from __future__ import annotations
 import ast, astor, autopep8, tokenize, io, sys
 import graphviz as gv
 from typing import Dict, List, Tuple, Set, Optional, Type
-from astpretty import pprint
+
 # TODO later: graph
 '''
 1. add a color dictionary for condition calls
