@@ -78,6 +78,8 @@ class CFG:
         self.edges: Dict[Tuple[int, int], Type[ast.AST]] = {}
         self.graph: Optional[gv.dot.Digraph] = None
 
+        self.flows = set()
+
     def _traverse(self, block: BasicBlock, visited: Set[int] = set(), calls: bool = True) -> None:
         if block.bid not in visited:
             visited.add(block.bid)
@@ -90,14 +92,14 @@ class CFG:
                 self._traverse(self.blocks[next_bid], visited, calls=calls)
                 self.graph.edge(str(block.bid), str(next_bid), label=astor.to_source(self.edges[(block.bid, next_bid)]) if self.edges[(block.bid, next_bid)] else '')
 
-    def _show(self, fmt: str = 'pdf', calls: bool = True) -> gv.dot.Digraph:
+    def _show(self, fmt: str = 'png', calls: bool = True) -> gv.dot.Digraph:
         self.graph = gv.Digraph(name='cluster_'+self.name, format=fmt, graph_attr={'label': self.name})
         self._traverse(self.start, calls=calls)
         for k, v in self.func_calls.items():
             self.graph.subgraph(v._show(fmt, calls))
         return self.graph
 
-    def show(self, filepath: str = './output', fmt: str = 'pdf', calls: bool = True, show: bool = True) -> None:
+    def show(self, filepath: str = './output', fmt: str = 'png', calls: bool = True, show: bool = True) -> None:
         self._show(fmt, calls)
         self.graph.render(filepath, view=show, cleanup=True)
 
@@ -135,6 +137,8 @@ class CFGVisitor(ast.NodeVisitor):
         self.cfg.blocks[frm_id].next.append(to_id)
         self.cfg.blocks[to_id].prev.append(frm_id)
         self.cfg.edges[(frm_id, to_id)] = condition
+
+        self.cfg.flows.add((frm_id, to_id))
         return self.cfg.blocks[to_id]
 
     def add_loop_block(self) -> BasicBlock:
@@ -166,8 +170,10 @@ class CFGVisitor(ast.NodeVisitor):
                         self.add_edge(prev_bid, next_bid, self.add_condition(self.cfg.edges.get((prev_bid, block.bid)), self.cfg.edges.get((block.bid, next_bid))))
                         self.cfg.edges.pop((block.bid, next_bid), None)
                         next_block.remove_from_prev(block.bid)
+                        self.cfg.flows.remove((block.bid, next_block.bid))
                     self.cfg.edges.pop((prev_bid, block.bid), None)
                     prev_block.remove_from_next(block.bid)
+                    self.cfg.flows.remove((prev_block.bid, block.bid))
                 block.prev.clear()
                 for next_bid in block.next:
                     self.remove_empty_blocks(self.cfg.blocks[next_bid], visited)
@@ -624,4 +630,5 @@ if __name__ == '__main__':
     parser.removeCommentsAndDocstrings()
     parser.formatCode()
     cfg = CFGVisitor().build(filename, ast.parse(parser.script))
+    print(cfg.flows)
     cfg.show()
