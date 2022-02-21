@@ -2,6 +2,7 @@ from __future__ import annotations
 import ast, astor, autopep8, tokenize, io, sys
 import graphviz as gv
 from typing import Dict, List, Tuple, Set, Optional, Type
+import os
 
 # TODO later: graph
 '''
@@ -53,7 +54,7 @@ class BasicBlock:
             self.next.remove(next_bid)
 
     def stmts_to_code(self) -> str:
-        code = ''
+        code = str(self.bid) + "\n"
         for stmt in self.stmts:
             line = astor.to_source(stmt)
             code += line.split('\n')[0] + "\n" if type(stmt) in [ast.If, ast.For, ast.While, ast.FunctionDef,
@@ -93,7 +94,8 @@ class CFG:
                 self.graph.edge(str(block.bid), str(next_bid), label=astor.to_source(self.edges[(block.bid, next_bid)]) if self.edges[(block.bid, next_bid)] else '')
 
     def _show(self, fmt: str = 'png', calls: bool = True) -> gv.dot.Digraph:
-        self.graph = gv.Digraph(name='cluster_'+self.name, format=fmt, graph_attr={'label': self.name})
+        #self.graph = gv.Digraph(name='cluster_'+self.name, format=fmt, graph_attr={'label': self.name})
+        self.graph = gv.Digraph(name='cluster_'+self.name, format=fmt)
         self._traverse(self.start, calls=calls)
         for k, v in self.func_calls.items():
             self.graph.subgraph(v._show(fmt, calls))
@@ -101,7 +103,8 @@ class CFG:
 
     def show(self, filepath: str = './output', fmt: str = 'png', calls: bool = True, show: bool = True) -> None:
         self._show(fmt, calls)
-        self.graph.render(filepath, view=show, cleanup=True)
+        path = os.path.normpath(filepath)
+        self.graph.render(path, view=show, cleanup=True)
 
 
 class CFGVisitor(ast.NodeVisitor):
