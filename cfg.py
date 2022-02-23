@@ -232,7 +232,7 @@ class CFGVisitor(ast.NodeVisitor):
         if type(node) in [ast.Import, ast.ImportFrom]:
             self.add_stmt(self.curr_block, node)
             return
-        if type(node) in [ast.FunctionDef, ast.AsyncFunctionDef]:
+        if type(node) in [ast.AsyncFunctionDef]:
             self.add_stmt(self.curr_block, node)
             self.add_subgraph(node)
             return
@@ -257,6 +257,14 @@ class CFGVisitor(ast.NodeVisitor):
             self.visit(child)
         if not self.curr_block.next:
             self.add_edge(self.curr_block.bid, to_bid)
+
+    def visit_Module(self, node):
+        print(node.__class__.__name__)
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node):
+        self.add_stmt(self.curr_block, node)
+        self.add_subgraph(node)
 
     # assert type check
     def visit_Assert(self, node):
@@ -634,4 +642,7 @@ if __name__ == '__main__':
     parser.formatCode()
     cfg = CFGVisitor().build(filename, ast.parse(parser.script))
     print(cfg.flows)
+    print(cfg.start.is_empty())
+    print(cfg.start.bid)
+    print(cfg.func_calls["fib"].flows)
     cfg.show()
