@@ -2,7 +2,7 @@ def func1(x, y = 10):
     return x + 5
 
 
-def func2(x):
+def func2(x=1, y =2, z=3, f=4):
     return x - 5
 
 
