@@ -51,7 +51,7 @@ class BasicBlock(object):
 
     def stmts_to_code(self) -> str:
         code = str(self.bid) + "\n"
-        if type(self.stmts[0]) == ast.Module:
+        if self.stmts and type(self.stmts[0]) == ast.Module:
             code += "Module"
             return code
         for stmt in self.stmts:
@@ -375,7 +375,7 @@ class CFGVisitor(ast.NodeVisitor):
         elif type(node) == ast.Lambda:
             return "lambda function"
 
-    def populate_body(self, body_list: List[ast.AST], to_bid: int) -> None:
+    def populate_body(self, body_list: List[Type[ast.AST]], to_bid: int) -> None:
         for child in body_list:
             self.visit(child)
         if not self.curr_block.next:
@@ -400,7 +400,7 @@ class CFGVisitor(ast.NodeVisitor):
         self.curr_block = next_block
 
     # TODO: change all those registers to stacks!
-    def visit_Assign(self, node):
+    def visit_Assign(self, node: ast.Assign):
         self.generic_visit(node)
 
         if (
@@ -484,6 +484,143 @@ class CFGVisitor(ast.NodeVisitor):
         self.add_edge(self.curr_block.bid, new_block.bid)
         self.curr_block = new_block
 
+    def visit_If(self, node: ast.If):
+        # Add the If statement at the end of the current block.
+        self.add_stmt(self.curr_block, node)
+
+        # Create a block for the code after the if-else.
+        afterif_block: BasicBlock = self.new_block()
+        # Create a new block for the body of the if.
+        # if_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.test)
+        if_block: BasicBlock = self.add_edge(self.curr_block.bid, self.new_block().bid)
+
+        # New block for the body of the else if there is an else clause.
+        if node.orelse:
+            self.curr_block = self.add_edge(
+                # self.curr_block.bid, self.new_block().bid, self.invert(node.test)
+                self.curr_block.bid, self.new_block().bid
+            )
+
+            # Visit the children in the body of the else to populate the block.
+            self.populate_body(node.orelse, afterif_block.bid)
+        else:
+            self.add_edge(
+                # self.curr_block.bid, afterif_block.bid, self.invert(node.test)
+                self.curr_block.bid, afterif_block.bid
+            )
+
+        # Visit children to populate the if block.
+        self.curr_block: BasicBlock = if_block
+
+        self.populate_body(node.body, afterif_block.bid)
+
+        # Continue building the CFG in the after-if block.
+        self.curr_block: BasicBlock = afterif_block
+
+    def visit_For(self, node: ast.While):
+        loop_guard = self.add_loop_block()
+        self.curr_block = loop_guard
+        self.add_stmt(self.curr_block, node)
+        # New block for the body of the for-loop.
+        for_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
+        if not node.orelse:
+            # Block of code after the for loop.
+            afterfor_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
+            self.loop_stack.append(afterfor_block)
+            self.curr_block = for_block
+
+            self.populate_body(node.body, loop_guard.bid)
+        else:
+            # Block of code after the for loop.
+            afterfor_block = self.new_block()
+            orelse_block = self.add_edge(
+                self.curr_block.bid,
+                self.new_block().bid
+                # ast.Name(id="else", ctx=ast.Load()),
+            )
+            self.loop_stack.append(afterfor_block)
+            self.curr_block = for_block
+
+            self.populate_body(node.body, loop_guard.bid)
+
+            self.curr_block = orelse_block
+            # for child in node.orelse:
+            #     self.visit(child)
+            # self.add_edge(orelse_block.bid, afterfor_block.bid)
+            self.populate_body(node.orelse, afterfor_block.bid)
+        # Continue building the CFG in the after-for block.
+        self.curr_block = afterfor_block
+
+    # ignore the case when using set or dict comprehension or generator expression but the result is not assigned to a variable
+    def visit_Expr(self, node: ast.Expr):
+        if type(node.value) == ast.ListComp and type(node.value.elt) == ast.Call:
+            self.listCompReg = (None, node.value)
+        elif type(node.value) == ast.Lambda:
+            self.lambdaReg = ("Anonymous Function", node.value)
+        # elif type(node.value) == ast.Call and type(node.value.func) == ast.Lambda:
+        #     self.lambdaReg = ('Anonymous Function', node.value.func)
+        elif type(node.value == ast.Call):
+            pass
+        else:
+            self.add_stmt(self.curr_block, node)
+        self.generic_visit(node)
+
+    def visit_While(self, node: ast.While):
+        loop_guard: BasicBlock = self.add_loop_block()
+        self.curr_block = loop_guard
+        self.add_stmt(loop_guard, node)
+        # New block for the case where the test in the while is False.
+        afterwhile_block: BasicBlock = self.new_block()
+        self.loop_stack.append(afterwhile_block)
+        # inverted_test = self.invert(node.test)
+
+        if not node.orelse:
+            # Skip shortcut loop edge if while True:
+            # if not (
+            #         isinstance(inverted_test, ast.NameConstant)
+            #         and inverted_test.value == False
+            # ):
+            #     self.add_edge(self.curr_block.bid, afterwhile_block.bid, inverted_test)
+            self.add_edge(self.curr_block.bid, afterwhile_block.bid)
+
+            # New block for the case where the test in the while is True.
+            # Populate the while block.
+            self.curr_block = self.add_edge(
+                # self.curr_block.bid, self.new_block().bid, node.test
+                self.curr_block.bid, self.new_block().bid
+            )
+
+            self.populate_body(node.body, loop_guard.bid)
+        else:
+            orelse_block: BasicBlock = self.new_block()
+            # if not (
+            #         isinstance(inverted_test, ast.NameConstant)
+            #         and inverted_test.value == False
+            # ):
+            #     self.add_edge(self.curr_block.bid, orelse_block.bid, inverted_test)
+            self.add_edge(self.curr_block.bid, orelse_block.bid)
+            self.curr_block = self.add_edge(
+                # self.curr_block.bid, self.new_block().bid, node.test
+                self.curr_block.bid, self.new_block().bid
+            )
+
+            self.populate_body(node.body, loop_guard.bid)
+            self.curr_block = orelse_block
+            # for child in node.orelse:
+            #     self.visit(child)
+            # self.add_edge(orelse_block.bid, afterwhile_block.bid)
+            self.populate_body(node.orelse, afterwhile_block.bid)
+
+        # Continue building the CFG in the after-while block.
+        self.curr_block = afterwhile_block
+        self.loop_stack.pop()
+
+    def visit_Break(self, node: ast.Break):
+        assert len(self.loop_stack), "Found break not inside loop"
+        self.add_stmt(self.curr_block, node)
+        # self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid, ast.Break())
+        self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid)
+
     # assert type check
     def visit_Assert(self, node):
         self.add_stmt(self.curr_block, node)
@@ -502,10 +639,6 @@ class CFGVisitor(ast.NodeVisitor):
         self.add_edge(self.curr_block.bid, afterawait_block.bid)
         self.generic_visit(node)
         self.curr_block = afterawait_block
-
-    def visit_Break(self, node):
-        assert len(self.loop_stack), "Found break not inside loop"
-        self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid, ast.Break())
 
     def visit_Continue(self, node):
         pass
@@ -557,54 +690,6 @@ class CFGVisitor(ast.NodeVisitor):
         finally:
             self.dictCompReg = None
 
-    # ignore the case when using set or dict comprehension or generator expression but the result is not assigned to a variable
-    def visit_Expr(self, node):
-        if type(node.value) == ast.ListComp and type(node.value.elt) == ast.Call:
-            self.listCompReg = (None, node.value)
-        elif type(node.value) == ast.Lambda:
-            self.lambdaReg = ("Anonymous Function", node.value)
-        # elif type(node.value) == ast.Call and type(node.value.func) == ast.Lambda:
-        #     self.lambdaReg = ('Anonymous Function', node.value.func)
-        elif type(node.value == ast.Call):
-            pass
-        else:
-            self.add_stmt(self.curr_block, node)
-        self.generic_visit(node)
-
-    def visit_For(self, node):
-        loop_guard = self.add_loop_block()
-        self.curr_block = loop_guard
-        self.add_stmt(self.curr_block, node)
-        # New block for the body of the for-loop.
-        for_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
-        if not node.orelse:
-            # Block of code after the for loop.
-            afterfor_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
-            self.loop_stack.append(afterfor_block)
-            self.curr_block = for_block
-
-            self.populate_body(node.body, loop_guard.bid)
-        else:
-            # Block of code after the for loop.
-            afterfor_block = self.new_block()
-            orelse_block = self.add_edge(
-                self.curr_block.bid,
-                self.new_block().bid,
-                ast.Name(id="else", ctx=ast.Load()),
-            )
-            self.loop_stack.append(afterfor_block)
-            self.curr_block = for_block
-
-            self.populate_body(node.body, loop_guard.bid)
-
-            self.curr_block = orelse_block
-            for child in node.orelse:
-                self.visit(child)
-            self.add_edge(orelse_block.bid, afterfor_block.bid)
-
-        # Continue building the CFG in the after-for block.
-        self.curr_block = afterfor_block
-
     def visit_GeneratorExp_Rec(
             self, generators: List[Type[ast.AST]]
     ) -> List[Type[ast.AST]]:
@@ -654,36 +739,6 @@ class CFGVisitor(ast.NodeVisitor):
             pass
         finally:
             self.genExpReg = None
-
-    def visit_If(self, node):
-        # Add the If statement at the end of the current block.
-        self.add_stmt(self.curr_block, node)
-
-        # Create a block for the code after the if-else.
-        afterif_block = self.new_block()
-        # Create a new block for the body of the if.
-        if_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.test)
-
-        # New block for the body of the else if there is an else clause.
-        if node.orelse:
-            self.curr_block = self.add_edge(
-                self.curr_block.bid, self.new_block().bid, self.invert(node.test)
-            )
-
-            # Visit the children in the body of the else to populate the block.
-            self.populate_body(node.orelse, afterif_block.bid)
-        else:
-            self.add_edge(
-                self.curr_block.bid, afterif_block.bid, self.invert(node.test)
-            )
-
-        # Visit children to populate the if block.
-        self.curr_block = if_block
-
-        self.populate_body(node.body, afterif_block.bid)
-
-        # Continue building the CFG in the after-if block.
-        self.curr_block = afterif_block
 
     def visit_IfExp_Rec(self, node: ast.AST) -> List[ast.AST]:
         return [
@@ -753,7 +808,7 @@ class CFGVisitor(ast.NodeVisitor):
                 )
             ]
 
-    def visit_ListComp(self, node):
+    def visit_ListComp(self, node: ast.ListComp):
         try:  # try may change to checking if self.listCompReg exists
             self.generic_visit(
                 ast.Module(self.visit_ListComp_Rec(self.listCompReg[1].generators))
@@ -893,64 +948,14 @@ class CFGVisitor(ast.NodeVisitor):
         else:
             self.add_edge(after_try_block.bid, finally_block.bid)
 
-    def visit_While(self, node: ast.While):
-        loop_guard = self.add_loop_block()
-        self.curr_block = loop_guard
-        self.add_stmt(loop_guard, node)
-        # New block for the case where the test in the while is False.
-        afterwhile_block = self.new_block()
-        self.loop_stack.append(afterwhile_block)
-        inverted_test = self.invert(node.test)
-
-        if not node.orelse:
-            # Skip shortcut loop edge if while True:
-            if not (
-                    isinstance(inverted_test, ast.NameConstant)
-                    and inverted_test.value == False
-            ):
-                self.add_edge(self.curr_block.bid, afterwhile_block.bid, inverted_test)
-
-            # New block for the case where the test in the while is True.
-            # Populate the while block.
-            self.curr_block = self.add_edge(
-                self.curr_block.bid, self.new_block().bid, node.test
-            )
-
-            self.populate_body(node.body, loop_guard.bid)
-        else:
-            orelse_block = self.new_block()
-            if not (
-                    isinstance(inverted_test, ast.NameConstant)
-                    and inverted_test.value == False
-            ):
-                self.add_edge(self.curr_block.bid, orelse_block.bid, inverted_test)
-            self.curr_block = self.add_edge(
-                self.curr_block.bid, self.new_block().bid, node.test
-            )
-
-            self.populate_body(node.body, loop_guard.bid)
-            self.curr_block = orelse_block
-            for child in node.orelse:
-                self.visit(child)
-            self.add_edge(orelse_block.bid, afterwhile_block.bid)
-
-        # Continue building the CFG in the after-while block.
-        self.curr_block = afterwhile_block
-        self.loop_stack.pop()
-
     def visit_Yield(self, node):
         self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
 
 
 if __name__ == "__main__":
     filename = sys.argv[1]
-    try:
-        source = open(filename, "r").read()
-        compile(source, filename, "exec")
-    except:
-        print("Error in source code")
-        exit(1)
-
+    file = open(filename, "r")
+    source = file.read()
     cfg = CFGVisitor().build(filename, ast.parse(source))
     print(cfg.flows)
     # print((cfg.func_calls["fib"])[0])
