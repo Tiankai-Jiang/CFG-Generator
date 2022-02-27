@@ -1,14 +1,10 @@
 from __future__ import annotations
-import ast, astor, autopep8, tokenize, io, sys
+import astor
 import graphviz as gv
-from typing import Dict, List, Tuple, Set, Optional, Type
 import os
-
-# TODO later: graph
-'''
-1. add a color dictionary for condition calls
-2. node shape (may be added into class Block)
-'''
+import ast
+import sys
+from typing import Dict, List, Tuple, Set, Optional, Type, Any
 
 
 class SingletonMeta(type):
@@ -28,11 +24,10 @@ class BlockId(metaclass=SingletonMeta):
         return self.counter
 
 
-class BasicBlock:
-
+class BasicBlock(object):
     def __init__(self, bid: int):
         self.bid: int = bid
-        self.stmts: List[Type[ast.AST]] = []
+        self.stmts: List[ast.AST] = []
         self.calls: List[str] = []
         self.prev: List[int] = []
         self.next: List[int] = []
@@ -56,18 +51,37 @@ class BasicBlock:
 
     def stmts_to_code(self) -> str:
         code = str(self.bid) + "\n"
+        if type(self.stmts[0]) == ast.Module:
+            code += "Module"
+            return code
         for stmt in self.stmts:
             line = astor.to_source(stmt)
-            code += line.split('\n')[0] + "\n" if type(stmt) in [ast.If, ast.For, ast.While, ast.FunctionDef,
-                                                                 ast.AsyncFunctionDef] else line
+            code += (
+                line.split("\n")[0] + "\n"
+                if type(stmt)
+                   in [ast.If, ast.For, ast.While, ast.FunctionDef, ast.AsyncFunctionDef]
+                else line
+            )
         return code
 
     def calls_to_code(self) -> str:
-        return '\n'.join(self.calls)
+        return "\n".join(self.calls)
+
+
+class FuncBlock(BasicBlock):
+    def __init__(self, bid: int):
+        super().__init__(bid)
+        self.name: Optional[str] = None
+        self.paras: List[str] = []
+
+
+class CallBlock(BasicBlock):
+    def __init__(self, bid: int):
+        super().__init__(bid)
+        self.args: List[str] = []
 
 
 class CFG:
-
     def __init__(self, name: str):
         self.name: str = name
 
@@ -83,47 +97,77 @@ class CFG:
 
         self.flows = set()
 
-    def _traverse(self, block: BasicBlock, visited: Set[int] = set(), calls: bool = True) -> None:
+    def _traverse(
+            self, block: BasicBlock, visited: Set[int] = set(), calls: bool = True
+    ) -> None:
         if block.bid not in visited:
             visited.add(block.bid)
             self.graph.node(str(block.bid), label=block.stmts_to_code())
             if calls and block.calls:
-                self.graph.node(str(block.bid) + '_call', label=block.calls_to_code(), _attributes={'shape': 'box'})
-                self.graph.edge(str(block.bid), str(block.bid) + '_call', label="calls",
-                                _attributes={'style': 'dashed'})
+                self.graph.node(
+                    str(block.bid) + "_call",
+                    label=block.calls_to_code(),
+                    _attributes={"shape": "box"},
+                )
+                self.graph.edge(
+                    str(block.bid),
+                    str(block.bid) + "_call",
+                    label="calls",
+                    _attributes={"style": "dashed"},
+                )
 
             for next_bid in block.next:
                 self._traverse(self.blocks[next_bid], visited, calls=calls)
-                self.graph.edge(str(block.bid), str(next_bid),
-                                label=astor.to_source(self.edges[(block.bid, next_bid)]) if self.edges[
-                                    (block.bid, next_bid)] else '')
+                self.graph.edge(
+                    str(block.bid),
+                    str(next_bid),
+                    label=astor.to_source(self.edges[(block.bid, next_bid)])
+                    if self.edges[(block.bid, next_bid)]
+                    else "",
+                )
 
-    def _show(self, fmt: str = 'png', calls: bool = True) -> gv.dot.Digraph:
+    def _show(self, fmt: str = "png", calls: bool = True) -> gv.dot.Digraph:
         # self.graph = gv.Digraph(name='cluster_'+self.name, format=fmt, graph_attr={'label': self.name})
-        self.graph = gv.Digraph(name='cluster_' + self.name, format=fmt)
+        self.graph = gv.Digraph(name="cluster_" + self.name, format=fmt)
         self._traverse(self.start, calls=calls)
         for k, v in self.func_calls.items():
             self.graph.subgraph(v[1]._show(fmt, calls))
         return self.graph
 
-    def show(self, filepath: str = './output', fmt: str = 'png', calls: bool = True, show: bool = True) -> None:
+    def show(
+            self,
+            filepath: str = "./output",
+            fmt: str = "png",
+            calls: bool = True,
+            show: bool = True,
+    ) -> None:
         self._show(fmt, calls)
         path = os.path.normpath(filepath)
         self.graph.render(path, view=show, cleanup=True)
 
 
 class CFGVisitor(ast.NodeVisitor):
-    invertComparators: Dict[Type[ast.AST], Type[ast.AST]] = {ast.Eq: ast.NotEq, ast.NotEq: ast.Eq, ast.Lt: ast.GtE,
-                                                             ast.LtE: ast.Gt,
-                                                             ast.Gt: ast.LtE, ast.GtE: ast.Lt, ast.Is: ast.IsNot,
-                                                             ast.IsNot: ast.Is, ast.In: ast.NotIn, ast.NotIn: ast.In}
+    invertComparators: Dict[Type[ast.AST], Type[ast.AST]] = {
+        ast.Eq: ast.NotEq,
+        ast.NotEq: ast.Eq,
+        ast.Lt: ast.GtE,
+        ast.LtE: ast.Gt,
+        ast.Gt: ast.LtE,
+        ast.GtE: ast.Lt,
+        ast.Is: ast.IsNot,
+        ast.IsNot: ast.Is,
+        ast.In: ast.NotIn,
+        ast.NotIn: ast.In,
+    }
 
     def __init__(self):
         super().__init__()
         self.loop_stack: List[BasicBlock] = []
         self.ifExp = False
+        self.cfg: Optional[CFG] = None
+        self.curr_block: Optional[BasicBlock] = None
 
-    def build(self, name: str, tree: Type[ast.AST]) -> CFG:
+    def build(self, name: str, tree: ast.Module) -> CFG:
         self.cfg = CFG(name)
         self.curr_block = self.new_block()
         self.cfg.start = self.curr_block
@@ -132,12 +176,29 @@ class CFGVisitor(ast.NodeVisitor):
         self.remove_empty_blocks(self.cfg.start)
         return self.cfg
 
+    def replace_block(self, new_block: BasicBlock):
+        old_bid: int = self.curr_block.bid
+        for prev_bid in self.curr_block.prev:
+            block: Type[BasicBlock] = self.cfg.blocks[prev_bid]
+            block.remove_from_next(old_bid)
+            self.add_edge(prev_bid, new_block.bid)
+        for next_bid in self.curr_block.next:
+            block: Type[BasicBlock] = self.cfg.blocks[next_bid]
+            block.remove_from_prev(old_bid)
+            self.add_edge(new_block.bid, next_bid)
+        self.curr_block = new_block
+
     def new_block(self) -> BasicBlock:
         bid: int = BlockId().gen()
         self.cfg.blocks[bid] = BasicBlock(bid)
         return self.cfg.blocks[bid]
 
-    def add_stmt(self, block: BasicBlock, stmt: Type[ast.AST]) -> None:
+    def new_func_block(self) -> FuncBlock:
+        bid: int = BlockId().gen()
+        self.cfg.blocks[bid] = FuncBlock(bid)
+        return self.cfg.blocks[bid]
+
+    def add_stmt(self, block: BasicBlock, stmt: ast.AST) -> None:
         block.stmts.append(stmt)
 
     def add_edge(self, frm_id: int, to_id: int, condition=None) -> BasicBlock:
@@ -156,15 +217,15 @@ class CFGVisitor(ast.NodeVisitor):
             self.add_edge(self.curr_block.bid, loop_block.bid)
             return loop_block
 
-    def add_subgraph(self, tree: Type[ast.FunctionDef]) -> None:
+    def add_subgraph(self, tree: ast.FunctionDef) -> None:
         arg_list: List[(str, Optional[ast.AST])] = []
+
         tmp_arg_list: List[str] = []
         for arg in tree.args.args:
-            print(arg.arg)
             tmp_arg_list.append(arg.arg)
         len_arg_list = len(tmp_arg_list)
         len_defaults = len(tree.args.defaults)
-        diff = len_arg_list-len_defaults
+        diff = len_arg_list - len_defaults
         index = 0
         while diff > 0:
             arg_list.append((tmp_arg_list[index], None))
@@ -175,10 +236,14 @@ class CFGVisitor(ast.NodeVisitor):
             arg_list.append((tmp_arg_list[index], default))
             index += 1
 
-        print(arg_list)
-        self.cfg.func_calls[tree.name] = (arg_list, CFGVisitor().build(tree.name, ast.Module(body=tree.body)))
+        self.cfg.func_calls[tree.name] = (
+            arg_list,
+            CFGVisitor().build(tree.name, ast.Module(body=tree.body)),
+        )
 
-    def add_condition(self, cond1: Optional[Type[ast.AST]], cond2: Optional[Type[ast.AST]]) -> Optional[Type[ast.AST]]:
+    def add_condition(
+            self, cond1: Optional[Type[ast.AST]], cond2: Optional[Type[ast.AST]]
+    ) -> Optional[ast.AST]:
         if cond1 and cond2:
             return ast.BoolOp(ast.And(), values=[cond1, cond2])
         else:
@@ -193,8 +258,14 @@ class CFGVisitor(ast.NodeVisitor):
                     prev_block = self.cfg.blocks[prev_bid]
                     for next_bid in block.next:
                         next_block = self.cfg.blocks[next_bid]
-                        self.add_edge(prev_bid, next_bid, self.add_condition(self.cfg.edges.get((prev_bid, block.bid)),
-                                                                             self.cfg.edges.get((block.bid, next_bid))))
+                        self.add_edge(
+                            prev_bid,
+                            next_bid,
+                            self.add_condition(
+                                self.cfg.edges.get((prev_bid, block.bid)),
+                                self.cfg.edges.get((block.bid, next_bid)),
+                            ),
+                        )
                         self.cfg.edges.pop((block.bid, next_bid), None)
                         next_block.remove_from_prev(block.bid)
                         self.cfg.flows.remove((block.bid, next_block.bid))
@@ -210,25 +281,45 @@ class CFGVisitor(ast.NodeVisitor):
                 for next_bid in block.next:
                     self.remove_empty_blocks(self.cfg.blocks[next_bid], visited)
 
-    def invert(self, node: Type[ast.AST]) -> Type[ast.AST]:
+    def invert(self, node: Type[ast.AST]) -> ast.AST:
         if type(node) == ast.Compare:
             if len(node.ops) == 1:
-                return ast.Compare(left=node.left, ops=[self.invertComparators[type(node.ops[0])]()],
-                                   comparators=node.comparators)
+                return ast.Compare(
+                    left=node.left,
+                    ops=[self.invertComparators[type(node.ops[0])]()],
+                    comparators=node.comparators,
+                )
             else:
-                tmpNode = ast.BoolOp(op=ast.And(), values=[
-                    ast.Compare(left=node.left, ops=[node.ops[0]], comparators=[node.comparators[0]])])
+                tmpNode = ast.BoolOp(
+                    op=ast.And(),
+                    values=[
+                        ast.Compare(
+                            left=node.left,
+                            ops=[node.ops[0]],
+                            comparators=[node.comparators[0]],
+                        )
+                    ],
+                )
                 for i in range(0, len(node.ops) - 1):
-                    tmpNode.values.append(ast.Compare(left=node.comparators[i], ops=[node.ops[i + 1]],
-                                                      comparators=[node.comparators[i + 1]]))
+                    tmpNode.values.append(
+                        ast.Compare(
+                            left=node.comparators[i],
+                            ops=[node.ops[i + 1]],
+                            comparators=[node.comparators[i + 1]],
+                        )
+                    )
                 return self.invert(tmpNode)
         elif isinstance(node, ast.BinOp) and type(node.op) in self.invertComparators:
-            return ast.BinOp(node.left, self.invertComparators[type(node.op)](), node.right)
+            return ast.BinOp(
+                node.left, self.invertComparators[type(node.op)](), node.right
+            )
         elif type(node) == ast.NameConstant and type(node.value) == bool:
             return ast.NameConstant(value=not node.value)
         elif type(node) == ast.BoolOp:
-            return ast.BoolOp(values=[self.invert(x) for x in node.values],
-                              op={ast.And: ast.Or(), ast.Or: ast.And()}.get(type(node.op)))
+            return ast.BoolOp(
+                values=[self.invert(x) for x in node.values],
+                op={ast.And: ast.Or(), ast.Or: ast.And()}.get(type(node.op)),
+            )
         elif type(node) == ast.UnaryOp:
             return self.UnaryopInvert(node)
         else:
@@ -254,7 +345,11 @@ class CFGVisitor(ast.NodeVisitor):
     #         return ast.BoolOp(values = value, op = ast.Or())
 
     def combine_conditions(self, node_list: List[Type[ast.AST]]) -> Type[ast.AST]:
-        return node_list[0] if len(node_list) == 1 else ast.BoolOp(op=ast.And(), values=node_list)
+        return (
+            node_list[0]
+            if len(node_list) == 1
+            else ast.BoolOp(op=ast.And(), values=node_list)
+        )
 
     def generic_visit(self, node):
         if type(node) in [ast.Import, ast.ImportFrom]:
@@ -264,7 +359,7 @@ class CFGVisitor(ast.NodeVisitor):
             self.add_stmt(self.curr_block, node)
             self.add_subgraph(node)
             return
-        if type(node) in [ast.AnnAssign, ast.AugAssign]:
+        if type(node) in [ast.AnnAssign]:
             self.add_stmt(self.curr_block, node)
         super().generic_visit(node)
 
@@ -272,26 +367,122 @@ class CFGVisitor(ast.NodeVisitor):
         if type(node) == ast.Name:
             return node.id
         elif type(node) == ast.Attribute:
-            return self.get_function_name(node.value) + '.' + node.attr
+            return self.get_function_name(node.value) + "." + node.attr
         elif type(node) == ast.Str:
             return node.s
         elif type(node) == ast.Subscript:
             return node.value.id
         elif type(node) == ast.Lambda:
-            return 'lambda function'
+            return "lambda function"
 
-    def populate_body(self, body_list: List[Type[ast.AST]], to_bid: int) -> None:
+    def populate_body(self, body_list: List[ast.AST], to_bid: int) -> None:
         for child in body_list:
             self.visit(child)
         if not self.curr_block.next:
             self.add_edge(self.curr_block.bid, to_bid)
 
-    def visit_Module(self, node):
+    def visit_Module(self, node: ast.Module):
+        self.add_stmt(self.curr_block, node)
+        new_block: BasicBlock = self.new_block()
+        self.add_edge(self.curr_block.bid, new_block.bid)
+        self.curr_block = new_block
+
         self.generic_visit(node)
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        new_func_block: FuncBlock = self.new_func_block()
+        self.replace_block(new_func_block)
         self.add_stmt(self.curr_block, node)
         self.add_subgraph(node)
+
+        next_block = self.new_block()
+        self.add_edge(self.curr_block.bid, next_block.bid)
+        self.curr_block = next_block
+
+    # TODO: change all those registers to stacks!
+    def visit_Assign(self, node):
+        self.generic_visit(node)
+
+        if (
+                type(node.value)
+                in [ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, ast.Lambda]
+                and len(node.targets) == 1
+                and type(node.targets[0]) == ast.Name
+        ):  # is this entire statement necessary?
+            if type(node.value) == ast.ListComp:
+                self.add_stmt(
+                    self.curr_block,
+                    ast.Assign(
+                        targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())],
+                        value=ast.List(elts=[], ctx=ast.Load()),
+                    ),
+                )
+                self.listCompReg = (node.targets[0].id, node.value)
+            elif type(node.value) == ast.SetComp:
+                self.add_stmt(
+                    self.curr_block,
+                    ast.Assign(
+                        targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())],
+                        value=ast.Call(
+                            func=ast.Name(id="set", ctx=ast.Load()),
+                            args=[],
+                            keywords=[],
+                        ),
+                    ),
+                )
+                self.setCompReg = (node.targets[0].id, node.value)
+            elif type(node.value) == ast.DictComp:
+                self.add_stmt(
+                    self.curr_block,
+                    ast.Assign(
+                        targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())],
+                        value=ast.Dict(keys=[], values=[]),
+                    ),
+                )
+                self.dictCompReg = (node.targets[0].id, node.value)
+            elif type(node.value) == ast.GeneratorExp:
+                self.add_stmt(
+                    self.curr_block,
+                    ast.Assign(
+                        targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())],
+                        value=ast.Call(
+                            func=ast.Name(
+                                id="__" + node.targets[0].id + "Generator__",
+                                ctx=ast.Load(),
+                            ),
+                            args=[],
+                            keywords=[],
+                        ),
+                    ),
+                )
+                self.genExpReg = (node.targets[0].id, node.value)
+            else:
+                self.lambdaReg = (node.targets[0].id, node.value)
+        else:
+            self.add_stmt(self.curr_block, node)
+            next_block = self.new_block()
+            self.add_edge(self.curr_block.bid, next_block.bid)
+            self.curr_block = next_block
+
+    #        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call):
+        if type(node.func) == ast.Lambda:
+            self.lambdaReg = ("Anonymous Function", node.func)
+            self.generic_visit(node)
+        else:
+            self.add_stmt(self.curr_block, node)
+            self.new_block()
+            new_block = self.new_block()
+            self.add_edge(self.curr_block.bid, new_block.bid)
+            self.curr_block = new_block
+            # self.curr_block.calls.append(self.get_function_name(node.func))
+
+    def visit_AugAssign(self, node: ast.AugAssign) -> Any:
+        self.add_stmt(self.curr_block, node)
+        new_block = self.new_block()
+        self.add_edge(self.curr_block.bid, new_block.bid)
+        self.curr_block = new_block
 
     # assert type check
     def visit_Assert(self, node):
@@ -301,36 +492,9 @@ class CFGVisitor(ast.NodeVisitor):
         # self.cfg.finalblocks.append(self.add_edge(self.curr_block.bid, self.new_block().bid, self.invert(node.test)))
         # If the assertion is True, continue the flow of the program.
         # success block
-        self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.test)
-        self.generic_visit(node)
-
-    # TODO: change all those registers to stacks!
-    def visit_Assign(self, node):
-        if type(node.value) in [ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, ast.Lambda] and len(
-                node.targets) == 1 and type(node.targets[0]) == ast.Name:  # is this entire statement necessary?
-            if type(node.value) == ast.ListComp:
-                self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())],
-                                                          value=ast.List(elts=[], ctx=ast.Load())))
-                self.listCompReg = (node.targets[0].id, node.value)
-            elif type(node.value) == ast.SetComp:
-                self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())],
-                                                          value=ast.Call(func=ast.Name(id='set', ctx=ast.Load()),
-                                                                         args=[], keywords=[])))
-                self.setCompReg = (node.targets[0].id, node.value)
-            elif type(node.value) == ast.DictComp:
-                self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())],
-                                                          value=ast.Dict(keys=[], values=[])))
-                self.dictCompReg = (node.targets[0].id, node.value)
-            elif type(node.value) == ast.GeneratorExp:
-                self.add_stmt(self.curr_block, ast.Assign(targets=[ast.Name(id=node.targets[0].id, ctx=ast.Store())],
-                                                          value=ast.Call(func=ast.Name(
-                                                              id='__' + node.targets[0].id + 'Generator__',
-                                                              ctx=ast.Load()), args=[], keywords=[])))
-                self.genExpReg = (node.targets[0].id, node.value)
-            else:
-                self.lambdaReg = (node.targets[0].id, node.value)
-        else:
-            self.add_stmt(self.curr_block, node)
+        self.curr_block = self.add_edge(
+            self.curr_block.bid, self.new_block().bid, node.test
+        )
         self.generic_visit(node)
 
     def visit_Await(self, node):
@@ -343,32 +507,51 @@ class CFGVisitor(ast.NodeVisitor):
         assert len(self.loop_stack), "Found break not inside loop"
         self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid, ast.Break())
 
-    def visit_Call(self, node):
-        if type(node.func) == ast.Lambda:
-            self.lambdaReg = ('Anonymous Function', node.func)
-            self.generic_visit(node)
-        else:
-            self.curr_block.calls.append(self.get_function_name(node.func))
-
     def visit_Continue(self, node):
         pass
 
-    def visit_DictComp_Rec(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
+    def visit_DictComp_Rec(
+            self, generators: List[Type[ast.AST]]
+    ) -> List[Type[ast.AST]]:
         if not generators:
             if self.dictCompReg[0]:  # bug if there is else statement in comprehension
-                return [ast.Assign(targets=[ast.Subscript(value=ast.Name(id=self.dictCompReg[0], ctx=ast.Load()),
-                                                          slice=ast.Index(value=self.dictCompReg[1].key),
-                                                          ctx=ast.Store())], value=self.dictCompReg[1].value)]
+                return [
+                    ast.Assign(
+                        targets=[
+                            ast.Subscript(
+                                value=ast.Name(id=self.dictCompReg[0], ctx=ast.Load()),
+                                slice=ast.Index(value=self.dictCompReg[1].key),
+                                ctx=ast.Store(),
+                            )
+                        ],
+                        value=self.dictCompReg[1].value,
+                    )
+                ]
             # else: # not supported yet
             #     return [ast.Expr(value=self.dictCompReg[1].elt)]
         else:
-            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[
-                ast.If(test=self.combine_conditions(generators[-1].ifs), body=self.visit_DictComp_Rec(generators[:-1]),
-                       orelse=[])] if generators[-1].ifs else self.visit_DictComp_Rec(generators[:-1]), orelse=[])]
+            return [
+                ast.For(
+                    target=generators[-1].target,
+                    iter=generators[-1].iter,
+                    body=[
+                        ast.If(
+                            test=self.combine_conditions(generators[-1].ifs),
+                            body=self.visit_DictComp_Rec(generators[:-1]),
+                            orelse=[],
+                        )
+                    ]
+                    if generators[-1].ifs
+                    else self.visit_DictComp_Rec(generators[:-1]),
+                    orelse=[],
+                )
+            ]
 
     def visit_DictComp(self, node):
         try:  # try may change to checking if self.dictCompReg exists
-            self.generic_visit(ast.Module(self.visit_DictComp_Rec(self.dictCompReg[1].generators)))
+            self.generic_visit(
+                ast.Module(self.visit_DictComp_Rec(self.dictCompReg[1].generators))
+            )
         except:
             pass
         finally:
@@ -379,9 +562,11 @@ class CFGVisitor(ast.NodeVisitor):
         if type(node.value) == ast.ListComp and type(node.value.elt) == ast.Call:
             self.listCompReg = (None, node.value)
         elif type(node.value) == ast.Lambda:
-            self.lambdaReg = ('Anonymous Function', node.value)
+            self.lambdaReg = ("Anonymous Function", node.value)
         # elif type(node.value) == ast.Call and type(node.value.func) == ast.Lambda:
         #     self.lambdaReg = ('Anonymous Function', node.value.func)
+        elif type(node.value == ast.Call):
+            pass
         else:
             self.add_stmt(self.curr_block, node)
         self.generic_visit(node)
@@ -402,7 +587,11 @@ class CFGVisitor(ast.NodeVisitor):
         else:
             # Block of code after the for loop.
             afterfor_block = self.new_block()
-            orelse_block = self.add_edge(self.curr_block.bid, self.new_block().bid, ast.Name(id='else', ctx=ast.Load()))
+            orelse_block = self.add_edge(
+                self.curr_block.bid,
+                self.new_block().bid,
+                ast.Name(id="else", ctx=ast.Load()),
+            )
             self.loop_stack.append(afterfor_block)
             self.curr_block = for_block
 
@@ -416,24 +605,51 @@ class CFGVisitor(ast.NodeVisitor):
         # Continue building the CFG in the after-for block.
         self.curr_block = afterfor_block
 
-    def visit_GeneratorExp_Rec(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
+    def visit_GeneratorExp_Rec(
+            self, generators: List[Type[ast.AST]]
+    ) -> List[Type[ast.AST]]:
         if not generators:
-            self.generic_visit(self.genExpReg[1].elt)  # the location of the node may be wrong
+            self.generic_visit(
+                self.genExpReg[1].elt
+            )  # the location of the node may be wrong
             if self.genExpReg[0]:  # bug if there is else statement in comprehension
                 return [ast.Expr(value=ast.Yield(value=self.genExpReg[1].elt))]
         else:
-            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[
-                ast.If(test=self.combine_conditions(generators[-1].ifs),
-                       body=self.visit_GeneratorExp_Rec(generators[:-1]), orelse=[])] if generators[
-                -1].ifs else self.visit_GeneratorExp_Rec(generators[:-1]), orelse=[])]
+            return [
+                ast.For(
+                    target=generators[-1].target,
+                    iter=generators[-1].iter,
+                    body=[
+                        ast.If(
+                            test=self.combine_conditions(generators[-1].ifs),
+                            body=self.visit_GeneratorExp_Rec(generators[:-1]),
+                            orelse=[],
+                        )
+                    ]
+                    if generators[-1].ifs
+                    else self.visit_GeneratorExp_Rec(generators[:-1]),
+                    orelse=[],
+                )
+            ]
 
     def visit_GeneratorExp(self, node):
         try:  # try may change to checking if self.genExpReg exists
-            self.generic_visit(ast.FunctionDef(name='__' + self.genExpReg[0] + 'Generator__',
-                                               args=ast.arguments(args=[], vararg=None, kwonlyargs=[], kw_defaults=[],
-                                                                  kwarg=None, defaults=[]),
-                                               body=self.visit_GeneratorExp_Rec(self.genExpReg[1].generators),
-                                               decorator_list=[], returns=None))
+            self.generic_visit(
+                ast.FunctionDef(
+                    name="__" + self.genExpReg[0] + "Generator__",
+                    args=ast.arguments(
+                        args=[],
+                        vararg=None,
+                        kwonlyargs=[],
+                        kw_defaults=[],
+                        kwarg=None,
+                        defaults=[],
+                    ),
+                    body=self.visit_GeneratorExp_Rec(self.genExpReg[1].generators),
+                    decorator_list=[],
+                    returns=None,
+                )
+            )
         except:
             pass
         finally:
@@ -450,12 +666,16 @@ class CFGVisitor(ast.NodeVisitor):
 
         # New block for the body of the else if there is an else clause.
         if node.orelse:
-            self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid, self.invert(node.test))
+            self.curr_block = self.add_edge(
+                self.curr_block.bid, self.new_block().bid, self.invert(node.test)
+            )
 
             # Visit the children in the body of the else to populate the block.
             self.populate_body(node.orelse, afterif_block.bid)
         else:
-            self.add_edge(self.curr_block.bid, afterif_block.bid, self.invert(node.test))
+            self.add_edge(
+                self.curr_block.bid, afterif_block.bid, self.invert(node.test)
+            )
 
         # Visit children to populate the if block.
         self.curr_block = if_block
@@ -465,37 +685,79 @@ class CFGVisitor(ast.NodeVisitor):
         # Continue building the CFG in the after-if block.
         self.curr_block = afterif_block
 
-    def visit_IfExp_Rec(self, node: Type[ast.AST]) -> List[Type[ast.AST]]:
-        return [ast.If(test=node.test, body=[ast.Return(value=node.body)],
-                       orelse=self.visit_IfExp_Rec(node.orelse) if type(node.orelse) == ast.IfExp else [
-                           ast.Return(value=node.orelse)])]
+    def visit_IfExp_Rec(self, node: ast.AST) -> List[ast.AST]:
+        return [
+            ast.If(
+                test=node.test,
+                body=[ast.Return(value=node.body)],
+                orelse=self.visit_IfExp_Rec(node.orelse)
+                if type(node.orelse) == ast.IfExp
+                else [ast.Return(value=node.orelse)],
+            )
+        ]
 
     def visit_IfExp(self, node):
         if self.ifExp:
             self.generic_visit(ast.Module(self.visit_IfExp_Rec(node)))
 
     def visit_Lambda(self, node):  # deprecated since there is autopep8
-        self.add_subgraph(ast.FunctionDef(name=self.lambdaReg[0], args=node.args, body=[ast.Return(value=node.body)],
-                                          decorator_list=[], returns=None))
+        self.add_subgraph(
+            ast.FunctionDef(
+                name=self.lambdaReg[0],
+                args=node.args,
+                body=[ast.Return(value=node.body)],
+                decorator_list=[],
+                returns=None,
+            )
+        )
         self.lambdaReg = None
 
-    def visit_ListComp_Rec(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
+    def visit_ListComp_Rec(
+            self, generators: List[Type[ast.AST]]
+    ) -> List[ast.AST]:
         if not generators:
-            self.generic_visit(self.listCompReg[1].elt)  # the location of the node may be wrong
+            self.generic_visit(
+                self.listCompReg[1].elt
+            )  # the location of the node may be wrong
             if self.listCompReg[0]:  # bug if there is else statement in comprehension
-                return [ast.Expr(value=ast.Call(
-                    func=ast.Attribute(value=ast.Name(id=self.listCompReg[0], ctx=ast.Load()), attr='append',
-                                       ctx=ast.Load()), args=[self.listCompReg[1].elt], keywords=[]))]
+                return [
+                    ast.Expr(
+                        value=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Name(id=self.listCompReg[0], ctx=ast.Load()),
+                                attr="append",
+                                ctx=ast.Load(),
+                            ),
+                            args=[self.listCompReg[1].elt],
+                            keywords=[],
+                        )
+                    )
+                ]
             else:
                 return [ast.Expr(value=self.listCompReg[1].elt)]
         else:
-            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[
-                ast.If(test=self.combine_conditions(generators[-1].ifs), body=self.visit_ListComp_Rec(generators[:-1]),
-                       orelse=[])] if generators[-1].ifs else self.visit_ListComp_Rec(generators[:-1]), orelse=[])]
+            return [
+                ast.For(
+                    target=generators[-1].target,
+                    iter=generators[-1].iter,
+                    body=[
+                        ast.If(
+                            test=self.combine_conditions(generators[-1].ifs),
+                            body=self.visit_ListComp_Rec(generators[:-1]),
+                            orelse=[],
+                        )
+                    ]
+                    if generators[-1].ifs
+                    else self.visit_ListComp_Rec(generators[:-1]),
+                    orelse=[],
+                )
+            ]
 
     def visit_ListComp(self, node):
         try:  # try may change to checking if self.listCompReg exists
-            self.generic_visit(ast.Module(self.visit_ListComp_Rec(self.listCompReg[1].generators)))
+            self.generic_visit(
+                ast.Module(self.visit_ListComp_Rec(self.listCompReg[1].generators))
+            )
         except:
             pass
         finally:
@@ -523,21 +785,48 @@ class CFGVisitor(ast.NodeVisitor):
 
     def visit_SetComp_Rec(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
         if not generators:
-            self.generic_visit(self.setCompReg[1].elt)  # the location of the node may be wrong
+            self.generic_visit(
+                self.setCompReg[1].elt
+            )  # the location of the node may be wrong
             if self.setCompReg[0]:
-                return [ast.Expr(value=ast.Call(
-                    func=ast.Attribute(value=ast.Name(id=self.setCompReg[0], ctx=ast.Load()), attr='add',
-                                       ctx=ast.Load()), args=[self.setCompReg[1].elt], keywords=[]))]
+                return [
+                    ast.Expr(
+                        value=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Name(id=self.setCompReg[0], ctx=ast.Load()),
+                                attr="add",
+                                ctx=ast.Load(),
+                            ),
+                            args=[self.setCompReg[1].elt],
+                            keywords=[],
+                        )
+                    )
+                ]
             else:  # not supported yet
                 return [ast.Expr(value=self.setCompReg[1].elt)]
         else:
-            return [ast.For(target=generators[-1].target, iter=generators[-1].iter, body=[
-                ast.If(test=self.combine_conditions(generators[-1].ifs), body=self.visit_SetComp_Rec(generators[:-1]),
-                       orelse=[])] if generators[-1].ifs else self.visit_SetComp_Rec(generators[:-1]), orelse=[])]
+            return [
+                ast.For(
+                    target=generators[-1].target,
+                    iter=generators[-1].iter,
+                    body=[
+                        ast.If(
+                            test=self.combine_conditions(generators[-1].ifs),
+                            body=self.visit_SetComp_Rec(generators[:-1]),
+                            orelse=[],
+                        )
+                    ]
+                    if generators[-1].ifs
+                    else self.visit_SetComp_Rec(generators[:-1]),
+                    orelse=[],
+                )
+            ]
 
     def visit_SetComp(self, node):
         try:  # try may change to checking if self.setCompReg exists
-            self.generic_visit(ast.Module(self.visit_SetComp_Rec(self.setCompReg[1].generators)))
+            self.generic_visit(
+                ast.Module(self.visit_SetComp_Rec(self.setCompReg[1].generators))
+            )
         except:
             pass
         finally:
@@ -546,10 +835,12 @@ class CFGVisitor(ast.NodeVisitor):
     def visit_Try(self, node):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
-        self.add_stmt(loop_guard, ast.Try(body=[], handlers=[], orelse=[], finalbody=[]))
+        self.add_stmt(
+            loop_guard, ast.Try(body=[], handlers=[], orelse=[], finalbody=[])
+        )
 
         after_try_block = self.new_block()
-        self.add_stmt(after_try_block, ast.Name(id='handle errors', ctx=ast.Load()))
+        self.add_stmt(after_try_block, ast.Name(id="handle errors", ctx=ast.Load()))
         self.populate_body(node.body, after_try_block.bid)
 
         self.curr_block = after_try_block
@@ -558,21 +849,32 @@ class CFGVisitor(ast.NodeVisitor):
             for handler in node.handlers:
                 before_handler_block = self.new_block()
                 self.curr_block = before_handler_block
-                self.add_edge(after_try_block.bid, before_handler_block.bid,
-                              handler.type if handler.type else ast.Name(id='Error', ctx=ast.Load()))
+                self.add_edge(
+                    after_try_block.bid,
+                    before_handler_block.bid,
+                    handler.type
+                    if handler.type
+                    else ast.Name(id="Error", ctx=ast.Load()),
+                )
 
                 after_handler_block = self.new_block()
-                self.add_stmt(after_handler_block, ast.Name(id='end except', ctx=ast.Load()))
+                self.add_stmt(
+                    after_handler_block, ast.Name(id="end except", ctx=ast.Load())
+                )
                 self.populate_body(handler.body, after_handler_block.bid)
                 self.add_edge(after_handler_block.bid, after_try_block.bid)
 
         if node.orelse:
             before_else_block = self.new_block()
             self.curr_block = before_else_block
-            self.add_edge(after_try_block.bid, before_else_block.bid, ast.Name(id='No Error', ctx=ast.Load()))
+            self.add_edge(
+                after_try_block.bid,
+                before_else_block.bid,
+                ast.Name(id="No Error", ctx=ast.Load()),
+            )
 
             after_else_block = self.new_block()
-            self.add_stmt(after_else_block, ast.Name(id='end no error', ctx=ast.Load()))
+            self.add_stmt(after_else_block, ast.Name(id="end no error", ctx=ast.Load()))
             self.populate_body(node.orelse, after_else_block.bid)
             self.add_edge(after_else_block.bid, after_try_block.bid)
 
@@ -580,14 +882,18 @@ class CFGVisitor(ast.NodeVisitor):
         self.curr_block = finally_block
 
         if node.finalbody:
-            self.add_edge(after_try_block.bid, finally_block.bid, ast.Name(id='Finally', ctx=ast.Load()))
+            self.add_edge(
+                after_try_block.bid,
+                finally_block.bid,
+                ast.Name(id="Finally", ctx=ast.Load()),
+            )
             after_finally_block = self.new_block()
             self.populate_body(node.finalbody, after_finally_block.bid)
             self.curr_block = after_finally_block
         else:
             self.add_edge(after_try_block.bid, finally_block.bid)
 
-    def visit_While(self, node):
+    def visit_While(self, node: ast.While):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
         self.add_stmt(loop_guard, node)
@@ -598,19 +904,29 @@ class CFGVisitor(ast.NodeVisitor):
 
         if not node.orelse:
             # Skip shortcut loop edge if while True:
-            if not (isinstance(inverted_test, ast.NameConstant) and inverted_test.value == False):
+            if not (
+                    isinstance(inverted_test, ast.NameConstant)
+                    and inverted_test.value == False
+            ):
                 self.add_edge(self.curr_block.bid, afterwhile_block.bid, inverted_test)
 
             # New block for the case where the test in the while is True.
             # Populate the while block.
-            self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.test)
+            self.curr_block = self.add_edge(
+                self.curr_block.bid, self.new_block().bid, node.test
+            )
 
             self.populate_body(node.body, loop_guard.bid)
         else:
             orelse_block = self.new_block()
-            if not (isinstance(inverted_test, ast.NameConstant) and inverted_test.value == False):
+            if not (
+                    isinstance(inverted_test, ast.NameConstant)
+                    and inverted_test.value == False
+            ):
                 self.add_edge(self.curr_block.bid, orelse_block.bid, inverted_test)
-            self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid, node.test)
+            self.curr_block = self.add_edge(
+                self.curr_block.bid, self.new_block().bid, node.test
+            )
 
             self.populate_body(node.body, loop_guard.bid)
             self.curr_block = orelse_block
@@ -626,80 +942,17 @@ class CFGVisitor(ast.NodeVisitor):
         self.curr_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
 
 
-class PyParser:
-
-    def __init__(self, script):
-        self.script = script
-
-    def formatCode(self):
-        self.script = autopep8.fix_code(self.script)
-
-    # https://github.com/liftoff/pyminifier/blob/master/pyminifier/minification.py
-    def removeCommentsAndDocstrings(self):
-        io_obj = io.StringIO(self.script)  # ByteIO for Python2?
-        out = ""
-        prev_toktype = tokenize.INDENT
-        last_lineno = -1
-        last_col = 0
-        for tok in tokenize.generate_tokens(io_obj.readline):
-            token_type = tok[0]
-            token_string = tok[1]
-            start_line, start_col = tok[2]
-            end_line, end_col = tok[3]
-            if start_line > last_lineno:
-                last_col = 0
-            if start_col > last_col:
-                out += (" " * (start_col - last_col))
-            # Remove comments:
-            if token_type == tokenize.COMMENT:
-                pass
-            # This series of conditionals removes docstrings:
-            elif token_type == tokenize.STRING:
-                if prev_toktype != tokenize.INDENT:
-                    # This is likely a docstring; double-check we're not inside an operator:
-                    if prev_toktype != tokenize.NEWLINE:
-                        # Note regarding NEWLINE vs NL: The tokenize module
-                        # differentiates between newlines that start a new statement
-                        # and newlines inside of operators such as parens, brackes,
-                        # and curly braces.  Newlines inside of operators are
-                        # NEWLINE and newlines that start new code are NL.
-                        # Catch whole-module docstrings:
-                        if start_col > 0:
-                            # Unlabelled indentation means we're inside an operator
-                            out += token_string
-                        # Note regarding the INDENT token: The tokenize module does
-                        # not label indentation inside of an operator (parens,
-                        # brackets, and curly braces) as actual indentation.
-                        # For example:
-                        # def foo():
-                        #     "The spaces before this docstring are tokenize.INDENT"
-                        #     test = [
-                        #         "The spaces before this string do not get a token"
-                        #     ]
-            else:
-                out += token_string
-            prev_toktype = token_type
-            last_col = end_col
-            last_lineno = end_line
-        self.script = out
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     filename = sys.argv[1]
     try:
-        source = open(filename, 'r').read()
-        compile(source, filename, 'exec')
+        source = open(filename, "r").read()
+        compile(source, filename, "exec")
     except:
-        print('Error in source code')
+        print("Error in source code")
         exit(1)
 
-    parser = PyParser(source)
-    parser.removeCommentsAndDocstrings()
-    parser.formatCode()
-    cfg = CFGVisitor().build(filename, ast.parse(parser.script))
+    cfg = CFGVisitor().build(filename, ast.parse(source))
     print(cfg.flows)
-    print(cfg.start.is_empty())
-    print(cfg.start.bid)
-    print((cfg.func_calls["fib"])[1].flows)
-    print((cfg.func_calls["func1"][0]))
+    # print((cfg.func_calls["fib"])[0])
+    # print((cfg.func_calls["fib"])[1].flows)
     cfg.show()
