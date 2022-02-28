@@ -81,6 +81,11 @@ class CallBlock(BasicBlock):
         self.args: List[str] = []
 
 
+class TryBlock(BasicBlock):
+    def __init__(self, bid: int):
+        super().__init__(bid)
+
+
 class CFG:
     def __init__(self, name: str):
         self.name: str = name
@@ -166,6 +171,8 @@ class CFGVisitor(ast.NodeVisitor):
         self.ifExp = False
         self.cfg: Optional[CFG] = None
         self.curr_block: Optional[BasicBlock] = None
+
+        self.loop_guard_stack: List[BasicBlock] = []
 
     def build(self, name: str, tree: ast.Module) -> CFG:
         self.cfg = CFG(name)
@@ -508,7 +515,6 @@ class CFGVisitor(ast.NodeVisitor):
                 # self.curr_block.bid, afterif_block.bid, self.invert(node.test)
                 self.curr_block.bid, afterif_block.bid
             )
-
         # Visit children to populate the if block.
         self.curr_block: BasicBlock = if_block
 
@@ -521,6 +527,7 @@ class CFGVisitor(ast.NodeVisitor):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
         self.add_stmt(self.curr_block, node)
+        self.loop_guard_stack.append(loop_guard)
         # New block for the body of the for-loop.
         for_block = self.add_edge(self.curr_block.bid, self.new_block().bid)
         if not node.orelse:
@@ -550,6 +557,7 @@ class CFGVisitor(ast.NodeVisitor):
             self.populate_body(node.orelse, afterfor_block.bid)
         # Continue building the CFG in the after-for block.
         self.curr_block = afterfor_block
+        self.loop_guard_stack.pop()
 
     # ignore the case when using set or dict comprehension or generator expression but the result is not assigned to a variable
     def visit_Expr(self, node: ast.Expr):
@@ -569,6 +577,7 @@ class CFGVisitor(ast.NodeVisitor):
         loop_guard: BasicBlock = self.add_loop_block()
         self.curr_block = loop_guard
         self.add_stmt(loop_guard, node)
+        self.loop_guard_stack.append(loop_guard)
         # New block for the case where the test in the while is False.
         afterwhile_block: BasicBlock = self.new_block()
         self.loop_stack.append(afterwhile_block)
@@ -582,7 +591,7 @@ class CFGVisitor(ast.NodeVisitor):
             # ):
             #     self.add_edge(self.curr_block.bid, afterwhile_block.bid, inverted_test)
             self.add_edge(self.curr_block.bid, afterwhile_block.bid)
-
+            print(afterwhile_block.bid)
             # New block for the case where the test in the while is True.
             # Populate the while block.
             self.curr_block = self.add_edge(
@@ -614,12 +623,37 @@ class CFGVisitor(ast.NodeVisitor):
         # Continue building the CFG in the after-while block.
         self.curr_block = afterwhile_block
         self.loop_stack.pop()
+        self.loop_guard_stack.pop()
 
     def visit_Break(self, node: ast.Break):
         assert len(self.loop_stack), "Found break not inside loop"
         self.add_stmt(self.curr_block, node)
         # self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid, ast.Break())
         self.add_edge(self.curr_block.bid, self.loop_stack[-1].bid)
+
+    # ToDO: final blocks to be add
+    def visit_Return(self, node: ast.Return):
+        if type(node.value) == ast.IfExp:
+            self.ifExp = True
+            self.generic_visit(node)
+            self.ifExp = False
+        else:
+            self.add_stmt(self.curr_block, node)
+        # self.cfg.finalblocks.append(self.curr_block)
+        # Continue in a new block but without any jump to it -> all code after
+        # the return statement will not be included in the CFG.
+        self.curr_block = self.new_block()
+
+    def visit_Pass(self, node: ast.Pass):
+        self.add_stmt(self.curr_block, node)
+        new_block: BasicBlock = self.new_block()
+        self.add_edge(self.curr_block.bid, new_block.bid)
+        self.curr_block = new_block
+
+    def visit_Continue(self, node: ast.Continue):
+        self.add_stmt(self.curr_block, node)
+        assert self.loop_guard_stack
+        self.add_edge(self.curr_block.bid, self.loop_guard_stack[-1].bid)
 
     # assert type check
     def visit_Assert(self, node):
@@ -639,9 +673,6 @@ class CFGVisitor(ast.NodeVisitor):
         self.add_edge(self.curr_block.bid, afterawait_block.bid)
         self.generic_visit(node)
         self.curr_block = afterawait_block
-
-    def visit_Continue(self, node):
-        pass
 
     def visit_DictComp_Rec(
             self, generators: List[Type[ast.AST]]
@@ -818,24 +849,8 @@ class CFGVisitor(ast.NodeVisitor):
         finally:
             self.listCompReg = None
 
-    def visit_Pass(self, node):
-        self.add_stmt(self.curr_block, node)
-
     def visit_Raise(self, node):
         self.add_stmt(self.curr_block, node)
-        self.curr_block = self.new_block()
-
-    # ToDO: final blocks to be add
-    def visit_Return(self, node):
-        if type(node.value) == ast.IfExp:
-            self.ifExp = True
-            self.generic_visit(node)
-            self.ifExp = False
-        else:
-            self.add_stmt(self.curr_block, node)
-        # self.cfg.finalblocks.append(self.curr_block)
-        # Continue in a new block but without any jump to it -> all code after
-        # the return statement will not be included in the CFG.
         self.curr_block = self.new_block()
 
     def visit_SetComp_Rec(self, generators: List[Type[ast.AST]]) -> List[Type[ast.AST]]:
@@ -887,7 +902,7 @@ class CFGVisitor(ast.NodeVisitor):
         finally:
             self.setCompReg = None
 
-    def visit_Try(self, node):
+    def visit_Try(self, node: ast.Try):
         loop_guard = self.add_loop_block()
         self.curr_block = loop_guard
         self.add_stmt(
@@ -958,6 +973,4 @@ if __name__ == "__main__":
     source = file.read()
     cfg = CFGVisitor().build(filename, ast.parse(source))
     print(cfg.flows)
-    # print((cfg.func_calls["fib"])[0])
-    # print((cfg.func_calls["fib"])[1].flows)
     cfg.show()

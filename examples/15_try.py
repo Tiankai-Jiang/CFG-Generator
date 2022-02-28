@@ -1,5 +1,6 @@
 try:
     b = b + 5
+    c = c + 1
 except KeyError:
     a += 1
 except ZeroDivisionError:
